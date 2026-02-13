@@ -6,16 +6,34 @@ import {
   TouchableOpacity,
   Dimensions,
   StatusBar,
+  Image
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import LottieView from 'lottie-react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
+import { useRouter } from 'expo-router';
 
 const { width } = Dimensions.get('window');
 
 export default function HomeScreen() {
+  const router = useRouter();
+const handleFundPress = () => {
+    router.push('/products/investments/mf');
+  };
+
+  const handleInsurancePress = (label: string) => {
+    const routes: { [key: string]: string } = {
+      Life: '/products/insurance/life',
+      Bike: '/products/insurance/bike',
+      Health: '/products/insurance/health',
+      pa: '/products/insurance/pa',
+    };
+
+    const path = routes[label];
+    if (path) {
+      router.push(path);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -113,30 +131,60 @@ export default function HomeScreen() {
             </View>
 
             <View style={styles.insuranceGrid}>
-              <InsuranceItem icon="shield-checkmark" label="Life" />
-              <InsuranceItem icon="bicycle" label="Bike" />
-              <InsuranceItem icon="medical" label="Health" />
-              <InsuranceItem icon="flame" label="Fire" />
+              <InsuranceItem
+                icon="shield-checkmark"
+                label="Life"
+                onPress={() => handleInsurancePress('Life')}
+              />
+              <InsuranceItem
+                icon="bicycle"
+                label="Bike"
+                onPress={() => handleInsurancePress('Bike')}
+              />
+              <InsuranceItem
+                icon="medkit-outline"
+                label="Health"
+                onPress={() => handleInsurancePress('Health')}
+              />
+              <InsuranceItem
+                icon="body-outline"
+                label="PA"
+                onPress={() => handleInsurancePress('pa')}
+              />
             </View>
           </View>
 
+          {/* Top Mutual Funds - Grid Layout (2x2) */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Mutual Funds</Text>
-              <TouchableOpacity>
+              <Text style={styles.sectionTitle}>Top Mutual Funds</Text>
+              <TouchableOpacity onPress={handleFundPress}>
                 <Text style={styles.viewAllText}>View All</Text>
               </TouchableOpacity>
             </View>
 
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.horizontalScroll}>
-              <MutualFundCard />
-              <MutualFundCard />
-              <MutualFundCard />
-              <MutualFundCard />
-            </ScrollView>
+            <View style={styles.mutualFundGrid}>
+              <MutualFundCard
+                image="https://equity-documents.s3.ap-south-1.amazonaws.com/UTI_MF.png"
+                name="UTI Nifty 50 Index Fund"
+                growth="+18.5%"
+              />
+              <MutualFundCard
+                image="https://assets-netstorage.groww.in/mf-assets/logos/icici_groww.png"
+                name="ICICI Long Term Equity Fund"
+                growth="+22.3%"
+              />
+              <MutualFundCard
+                image="https://equity-documents.s3.ap-south-1.amazonaws.com/axis.png"
+                name="Axis Gold Fund"
+                growth="+15.2%"
+              />
+              <MutualFundCard
+                image="https://assets-netstorage.groww.in/mf-assets/logos/mirae_groww.png"
+                name="MIRAE Asset Healthcare Fund"
+                growth="+24.8%"
+              />
+            </View>
           </View>
 
           <View style={styles.section}>
@@ -204,9 +252,9 @@ function ServiceItem({ icon, label }: { icon: any; label: string }) {
   );
 }
 
-function InsuranceItem({ icon, label }: { icon: any; label: string }) {
+function InsuranceItem({ icon, label, onPress }: { icon: any; label: string; onPress: () => void }) {
   return (
-    <TouchableOpacity style={styles.insuranceItem}>
+    <TouchableOpacity style={styles.insuranceItem} onPress={onPress}>
       <View style={styles.insuranceIconContainer}>
         <Ionicons name={icon} size={32} color="#103d69" />
       </View>
@@ -215,12 +263,35 @@ function InsuranceItem({ icon, label }: { icon: any; label: string }) {
   );
 }
 
-function MutualFundCard() {
+function MutualFundCard({ image, name, growth }: { image: string; name: string; growth: string }) {
+  const router = useRouter();
+
+  const handleFundPress = () => {
+    router.push('/products/investments/mf');
+  };
+
   return (
-    <View style={styles.mutualFundCard}>
-      <View style={styles.mutualFundPlaceholder} />
-      <Text style={styles.mutualFundLabel}>Mobile{'\n'}Recharge</Text>
-    </View>
+    <TouchableOpacity style={styles.mutualFundCard} onPress={handleFundPress}>
+      <View style={styles.mutualFundHeader}>
+        <View style={styles.mutualFundImageContainer}>
+          <Image
+            source={{ uri: image }}
+            style={styles.mutualFundImage}
+            resizeMode="contain"
+          />
+        </View>
+        <View style={styles.growthBadge}>
+          <Text style={styles.growthText}>{growth}</Text>
+        </View>
+      </View>
+      <Text style={styles.mutualFundName} numberOfLines={2}>{name}</Text>
+      <View style={styles.fundFooter}>
+        <Text style={styles.fundType}>Equity</Text>
+        <View style={styles.investNowBadge}>
+          <Text style={styles.investNowText}>Invest</Text>
+        </View>
+      </View>
+    </TouchableOpacity>
   );
 }
 
@@ -262,7 +333,6 @@ function CreditCard({
   );
 }
 
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -282,29 +352,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#f3f4f6',
   },
-
   lottieContainer: {
     width: 60,
     height: 60,
     marginRight: 16,
   },
-
   lottie: {
     width: '100%',
     height: '100%',
   },
-
   cashbackInfo: {
     flex: 1,
   },
-
   cashbackTitle: {
     fontSize: 16,
     fontWeight: '700',
     color: '#1f2937',
     marginBottom: 4,
   },
-
   cashbackSubtitle: {
     fontSize: 14,
     color: '#6b7280',
@@ -392,7 +457,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     flexDirection: 'row',
-    justifyContent: 'space-between', // Changed from 'flex-start' to 'space-between'
+    justifyContent: 'space-between',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -400,21 +465,21 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   serviceItem: {
-    width: (width - 64) / 5, // Adjusted for 5 items with padding
+    width: (width - 64) / 5,
     alignItems: 'center',
-    padding: 4, // Reduced padding to fit all items
+    padding: 4,
   },
   serviceIconContainer: {
-    width: 48, // Reduced size
-    height: 48, // Reduced size
+    width: 48,
+    height: 48,
     borderRadius: 12,
     backgroundColor: '#eff6ff',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 6, // Reduced margin
+    marginBottom: 6,
   },
   serviceLabel: {
-    fontSize: 10, // Smaller font size
+    fontSize: 10,
     color: '#374151',
     textAlign: 'center',
     lineHeight: 14,
@@ -495,23 +560,94 @@ const styles = StyleSheet.create({
     marginHorizontal: -16,
     paddingHorizontal: 16,
   },
+  // Mutual Funds Grid Styles (2x2 layout)
+  mutualFundGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
   mutualFundCard: {
-    width: 120,
-    marginRight: 12,
+    width: (width - 44) / 2,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#f3f4f6',
+    marginBottom: 12,
   },
-  mutualFundPlaceholder: {
-    width: 120,
-    height: 120,
-    backgroundColor: '#e5e7eb',
+  mutualFundHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  mutualFundImageContainer: {
+    width: 48,
+    height: 48,
+    backgroundColor: '#fff',
     borderRadius: 12,
-    marginBottom: 8,
+    padding: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
   },
-  mutualFundLabel: {
+  mutualFundImage: {
+    width: '100%',
+    height: '100%',
+  },
+  growthBadge: {
+    backgroundColor: '#dcfce7',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  growthText: {
+    color: '#10b981',
     fontSize: 12,
-    color: '#374151',
-    textAlign: 'center',
-    lineHeight: 16,
+    fontWeight: '700',
   },
+  mutualFundName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1f2937',
+    lineHeight: 20,
+    marginBottom: 12,
+    height: 40,
+  },
+  fundFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  fundType: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '500',
+    backgroundColor: '#f3f4f6',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  investNowBadge: {
+    backgroundColor: '#2563eb',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  investNowText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  // Credit Card Styles
   creditCard: {
     width: width - 80,
     height: 200,

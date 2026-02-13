@@ -156,37 +156,37 @@ const addOnsByPlan = {
   ,
   'reliance gain': [
     {
-      id: 'addon-10',
+      id: 'EnhancedCover',
       name: 'Enhanced Cover',
       description: 'Enhanced coverage limits',
       type: 'checkbox'
     },
     {
-      id: 'addon-11',
+      id: 'ConvienceCover',
       name: 'Convience Cover',
       description: 'Convenience and easy claim processing',
       type: 'checkbox'
     },
     {
-      id: 'addon-12',
+      id: 'DoubleCover',
       name: 'Double Cover',
       description: 'Double sum insured benefit',
       type: 'checkbox'
     },
     {
-      id: 'addon-13',
+      id: 'FamilyCareCover',
       name: 'Family Care Cover',
       description: 'Extended family coverage',
       type: 'checkbox'
     },
     {
-      id: 'addon-14',
+      id: 'SmartCover',
       name: 'Smart Cover',
       description: 'Smart coverage options',
       type: 'checkbox'
     },
     {
-      id: 'addon-15',
+      id: 'PreventiveCover',
       name: 'Preventive Cover',
       description: 'Preventive healthcare coverage',
       type: 'checkbox'
@@ -197,8 +197,9 @@ const addOnsByPlan = {
       description: 'Room rent coverage type',
       type: 'dropdown',
       options: [
-        { id: 'room-twin', name: 'Twin Sharing' },
-        { id: 'room-single', name: 'Single Private AC' }
+        { id: 'Twin Sharing', name: 'Twin Sharing' },
+        { id: 'Single AC Private Room', name: 'Single AC Private Room' },
+        { id: 'Actuals', name: 'Actuals' }
       ]
     },
     {
@@ -207,10 +208,10 @@ const addOnsByPlan = {
       description: 'Choose your deductible amount',
       type: 'dropdown',
       options: [
-        { id: 'deductible-10000', name: '₹10,000' },
-        { id: 'deductible-25000', name: '₹25,000' },
-        { id: 'deductible-50000', name: '₹50,000' },
-        { id: 'deductible-100000', name: '₹1,00,000' }
+        { id: '10000', name: '10000' },
+        { id: '25000', name: '25000' },
+        { id: '50000', name: '50000' },
+        { id: '100000', name: '100000' }
       ]
     }
   ],
@@ -542,15 +543,15 @@ export default function HealthQuotations() {
       };
 
       // Add all selected add-ons to payload
+    
       plan.add_ons.forEach(addOn => {
         if (tempSelectedAddOns.has(addOn.id)) {
           // Add add-on ID with value "1"
-          addonPayload[addOn.id] = "1";
-
+          addonPayload[addOn.id] =addonPayload.productName === "Reliance Gain" ? true : "1";
           // Add dropdown option if available
           if (addOn.type === 'dropdown') {
             const selectedOption = tempDropdownVals[addOn.id];
-            console.log(selectedOption, "seelcted option")
+            console.log(addOn, "seelcted option")
             if (selectedOption) {
               if (selectedOption.id === "field_PED_TENURE1" || selectedOption.id === "field_PED_TENURE2") {
                 addonPayload[`${addOn.id}`] = selectedOption.name;
@@ -561,11 +562,14 @@ export default function HealthQuotations() {
               else if (selectedOption.id === "Twin Sharing" || selectedOption.id === "Single Private AC Room") {
                 addonPayload.roomRentTypeInfinity = selectedOption.id
               }
-              else if (selectedOption.id === "10000" || selectedOption.id === "25000" || selectedOption.id === "50000" || selectedOption.id === "100000") {
+              else if (selectedOption.id === "10000" && addOn.id ==='VoluntaryAggregateDeductible' || selectedOption.id === "25000" && addOn.id ==='VoluntaryAggregateDeductible' || selectedOption.id === "50000" && addOn.id ==='VoluntaryAggregateDeductible' || selectedOption.id === "100000" && addOn.id ==='VoluntaryAggregateDeductible') {
                 addonPayload.VoluntaryAggregateDeductible = true;
                 addonPayload.DeductibleInfinity = selectedOption.id;
-
-
+              }
+               else if (selectedOption.id === "10000" && addOn.id =="addon-17" || selectedOption.id === "25000" && addOn.id =="addon-17" || selectedOption.id === "50000" && addOn.id =="addon-17" || selectedOption.id === "100000" && addOn.id =="addon-17") {
+                addonPayload.VoluntaryAggregateDeductible = true;
+                addonPayload.DeductibleGain = selectedOption.id;
+               addonPayload.SelectedDeductible = true;
               }
               else {
                 addonPayload[`${addOn.id}`] = selectedOption.id;

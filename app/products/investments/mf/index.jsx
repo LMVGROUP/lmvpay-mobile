@@ -1,13 +1,15 @@
 import {
   View,
   Text,
-  ScrollView,
   TouchableOpacity,
   FlatList,
   StyleSheet,
   StatusBar,
+  ActivityIndicator,
+  RefreshControl,
+  Image,
 } from 'react-native';
-import React, { useState } from 'react';
+import React, { useEffect, useState, useCallback, useRef, memo } from 'react';
 import {
   MaterialIcons,
   Feather,
@@ -16,169 +18,120 @@ import {
   AntDesign,
   FontAwesome5,
 } from '@expo/vector-icons';
-
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import axios from 'axios';
 
-// Mock data for fund categories
-const categories = [
-  { id: '1', name: 'All', icon: 'pie-chart', iconType: 'Feather' },
-  { id: '2', name: 'Large Cap', icon: 'bar-chart', iconType: 'Feather' },
-  { id: '3', name: 'Mid Cap', icon: 'trending-up', iconType: 'Feather' },
-  { id: '4', name: 'Flexi Cap', icon: 'target', iconType: 'Feather' },
-  { id: '5', name: 'Index Funds', icon: 'chart-bar', iconType: 'FontAwesome5' },
-  { id: '6', name: 'ELSS', icon: 'shield', iconType: 'Feather' },
-  { id: '7', name: 'Small Cap', icon: 'rocket', iconType: 'MaterialIcons' },
-  { id: '8', name: 'Low Risk', icon: 'lock', iconType: 'Feather' },
-];
+// Skeleton Loader Component
+const FundCardSkeleton = memo(() => (
+  <View style={styles.skeletonCard}>
+    <View style={styles.skeletonHeader}>
+      <View style={[styles.skeletonLine, { width: '70%', height: 20 }]} />
+      <View style={[styles.skeletonLine, { width: '25%', height: 25 }]} />
+    </View>
+    
+    <View style={[styles.skeletonLine, { width: '50%', height: 16, marginVertical: 8 }]} />
+    
+    <View style={styles.skeletonTags}>
+      <View style={[styles.skeletonLine, { width: 80, height: 24 }]} />
+      <View style={[styles.skeletonLine, { width: 80, height: 24, marginLeft: 8 }]} />
+    </View>
+    
+    <View style={styles.skeletonStats}>
+      <View style={styles.skeletonStat}>
+        <View style={[styles.skeletonLine, { width: 50, height: 14 }]} />
+        <View style={[styles.skeletonLine, { width: 60, height: 18, marginTop: 4 }]} />
+      </View>
+      <View style={styles.skeletonDivider} />
+      <View style={styles.skeletonStat}>
+        <View style={[styles.skeletonLine, { width: 50, height: 14 }]} />
+        <View style={[styles.skeletonLine, { width: 60, height: 18, marginTop: 4 }]} />
+      </View>
+      <View style={styles.skeletonDivider} />
+      <View style={styles.skeletonStat}>
+        <View style={[styles.skeletonLine, { width: 50, height: 14 }]} />
+        <View style={[styles.skeletonLine, { width: 60, height: 18, marginTop: 4 }]} />
+      </View>
+    </View>
+    
+    <View style={styles.skeletonFooter}>
+      <View>
+        <View style={[styles.skeletonLine, { width: 60, height: 14 }]} />
+        <View style={[styles.skeletonLine, { width: 80, height: 20, marginTop: 4 }]} />
+      </View>
+      <View style={[styles.skeletonLine, { width: 120, height: 40 }]} />
+    </View>
+  </View>
+));
 
-// Mock data for funds
-const fundsData = [
-  {
-    id: '1',
-    name: 'Parag Parikh Flexi Cap Fund',
-    category: 'Flexi Cap',
-    returns: '18.4%',
-    returnPeriod: '3Y',
-    risk: 'Moderate',
-    minSip: 1000,
-    expenseRatio: '0.65%',
-    tags: ['🔥 Best for Beginners', '⭐ Low Expense Ratio'],
-  },
-  {
-    id: '2',
-    name: 'Axis Bluechip Fund',
-    category: 'Large Cap',
-    returns: '15.2%',
-    returnPeriod: '3Y',
-    risk: 'Low',
-    minSip: 500,
-    expenseRatio: '0.70%',
-    tags: ['📈 Consistent Performer'],
-  },
-  {
-    id: '3',
-    name: 'Mirae Asset Mid Cap Fund',
-    category: 'Mid Cap',
-    returns: '22.1%',
-    returnPeriod: '3Y',
-    risk: 'High',
-    minSip: 1000,
-    expenseRatio: '0.75%',
-    tags: ['🔥 Best for Beginners'],
-  },
-  {
-    id: '4',
-    name: 'UTI Nifty 50 Index Fund',
-    category: 'Index Funds',
-    returns: '14.8%',
-    returnPeriod: '3Y',
-    risk: 'Low',
-    minSip: 500,
-    expenseRatio: '0.20%',
-    tags: ['⭐ Low Expense Ratio'],
-  },
-  {
-    id: '5',
-    name: 'SBI Small Cap Fund',
-    category: 'Small Cap',
-    returns: '26.5%',
-    returnPeriod: '3Y',
-    risk: 'High',
-    minSip: 500,
-    expenseRatio: '0.85%',
-    tags: ['📈 Consistent Performer'],
-  },
-];
+const CategoryPillSkeleton = memo(() => (
+  <View style={styles.skeletonCategoryPill}>
+    <View style={[styles.skeletonLine, { width: 20, height: 20, borderRadius: 10 }]} />
+    <View style={[styles.skeletonLine, { width: 60, height: 16, marginLeft: 8 }]} />
+  </View>
+));
 
-const Index = () => {
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [funds, setFunds] = useState(fundsData);
-  const router = useRouter();
-
-  const handleCategorySelect = (category) => {
-    setSelectedCategory(category);
-    // Filter funds based on selected category
-    if (category === 'All') {
-      setFunds(fundsData);
-    } else {
-      const filteredFunds = fundsData.filter((fund) =>
-        fund.category
-          .toLowerCase()
-          .includes(category.toLowerCase().replace(' ', ''))
-      );
-      setFunds(filteredFunds);
+// Memoized Fund Card Component
+const FundCard = memo(({ item, onPress }) => {
+  const scheme = item.schemeData || {};
+  
+  const getCategoryColor = useCallback((category) => {
+    switch (category) {
+      case 'EQUITY': return '#DC2626';
+      case 'DEBT': return '#10B981';
+      case 'HYBRID': return '#F59E0B';
+      case 'OTHERS': return '#6B7280';
+      default: return '#059669';
     }
-  };
+  }, []);
 
-  const handleMF =()=>{
-    router.push("products/investments/mf/portpolio")
-  }
-
-  const handleInvestPress = () => {
-    // Navigation to login/signup would go here
-    router.push("products/investments/mf/funddetail")
-    console.log('Invest button pressed - redirect to login');
-  };
-
-  const renderIcon = (iconType, iconName, size, color) => {
-    switch (iconType) {
-      case 'MaterialIcons':
-        return <MaterialIcons name={iconName} size={size} color={color} />;
-      case 'FontAwesome':
-        return <FontAwesome name={iconName} size={size} color={color} />;
-      case 'Ionicons':
-        return <Ionicons name={iconName} size={size} color={color} />;
-      case 'AntDesign':
-        return <AntDesign name={iconName} size={size} color={color} />;
-      case 'FontAwesome5':
-        return <FontAwesome5 name={iconName} size={size} color={color} />;
-      default:
-        return <Feather name={iconName} size={size} color={color} />;
+  const getRiskColor = useCallback((risk) => {
+    switch (risk.toLowerCase()) {
+      case 'low': return '#10B981';
+      case 'moderate': return '#F59E0B';
+      case 'high': return '#EF4444';
+      default: return '#6B7280';
     }
-  };
+  }, []);
 
-  const renderCategoryItem = ({ item }) => (
-    <TouchableOpacity
-      style={[
-        styles.categoryPill,
-        selectedCategory === item.name && styles.categoryPillActive,
-      ]}
-      onPress={() => handleCategorySelect(item.name)}>
-      {renderIcon(
-        item.iconType,
-        item.icon,
-        16,
-        selectedCategory === item.name ? '#fff' : '#666'
-      )}
-      <Text
-        style={[
-          styles.categoryText,
-          selectedCategory === item.name && styles.categoryTextActive,
-        ]}>
-        {item.name}
-      </Text>
-    </TouchableOpacity>
-  );
-
-  const renderFundCard = ({ item }) => (
+  return (
     <View style={styles.fundCard}>
-      {/* Top Row */}
+      {/* Header with Image and Name */}
       <View style={styles.fundCardHeader}>
-        <View style={styles.fundNameContainer}>
-          <Text style={styles.fundName} numberOfLines={1}>
-            {item.name}
-          </Text>
-          <View
-            style={[
-              styles.categoryBadge,
-              { backgroundColor: getCategoryColor(item.category) },
-            ]}>
-            <Text style={styles.categoryBadgeText}>{item.category}</Text>
+        <View style={styles.fundHeaderLeft}>
+          {scheme.image ? (
+            <Image 
+              source={{ uri: scheme.image }} 
+              style={styles.fundImage}
+            />
+          ) : (
+            <View style={styles.fundImagePlaceholder}>
+              <MaterialIcons name="account-balance" size={24} color="#1A365D" />
+            </View>
+          )}
+          <View style={styles.fundTitleContainer}>
+            <Text style={styles.fundName} numberOfLines={2}>
+              {item.name}
+            </Text>
+            <View style={styles.fundCodeContainer}>
+              <Text style={styles.fundCode}>{scheme.scheme_code || 'N/A'}</Text>
+              {scheme.amc_name && (
+                <Text style={styles.amcName}> • {scheme.amc_name}</Text>
+              )}
+            </View>
           </View>
         </View>
+        <View
+          style={[
+            styles.categoryBadge,
+            { backgroundColor: getCategoryColor(item.category) },
+          ]}>
+          <Text style={styles.categoryBadgeText}>{item.category}</Text>
+        </View>
+      </View>
 
-        {/* Tags */}
+      {/* Tags */}
+      {item.tags.length > 0 && (
         <View style={styles.tagsContainer}>
           {item.tags.map((tag, index) => (
             <View key={index} style={styles.tag}>
@@ -186,15 +139,15 @@ const Index = () => {
             </View>
           ))}
         </View>
-      </View>
+      )}
 
-      {/* Middle Section - Returns and Risk */}
+      {/* Middle Section - NAV and Risk */}
       <View style={styles.fundStats}>
         <View style={styles.statItem}>
-          <Text style={styles.statLabel}>{item.returnPeriod} Returns</Text>
+          <Text style={styles.statLabel}>NAV</Text>
           <View style={styles.returnContainer}>
             <Feather name="trending-up" size={14} color="#10B981" />
-            <Text style={styles.returnsText}>{item.returns}</Text>
+            <Text style={styles.navText}>₹{parseFloat(scheme.nav || 0).toFixed(4)}</Text>
           </View>
         </View>
 
@@ -214,8 +167,8 @@ const Index = () => {
         <View style={styles.statDivider} />
 
         <View style={styles.statItem}>
-          <Text style={styles.statLabel}>Expense Ratio</Text>
-          <Text style={styles.expenseRatio}>{item.expenseRatio}</Text>
+          <Text style={styles.statLabel}>Returns (3Y)</Text>
+          <Text style={styles.returnsText}>{item.returns}</Text>
         </View>
       </View>
 
@@ -226,47 +179,398 @@ const Index = () => {
           <Text style={styles.sipAmount}>₹{item.minSip}</Text>
         </View>
 
-        <TouchableOpacity style={styles.viewButton} onPress={handleInvestPress}>
-          <Feather name="lock" size={16} color="#1A365D" />
+        <TouchableOpacity 
+          style={styles.viewButton} 
+          onPress={() => onPress(item)}
+          activeOpacity={0.7}>
+          <Feather name="info" size={16} color="#1A365D" />
           <Text style={styles.viewButtonText}>View Details</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
+});
 
-  const getCategoryColor = (category) => {
-    switch (category) {
-      case 'Large Cap':
-        return '#3B82F6';
-      case 'Mid Cap':
-        return '#F59E0B';
-      case 'Flexi Cap':
-        return '#8B5CF6';
-      case 'Index Funds':
-        return '#1E40AF';
-      case 'ELSS':
-        return '#EF4444';
-      case 'Small Cap':
-        return '#DC2626';
-      case 'Low Risk':
-        return '#78350F';
+// Memoized Category Pill Component
+const CategoryPill = memo(({ item, selected, onPress }) => {
+  const renderIcon = useCallback((iconType, iconName, size, color) => {
+    switch (iconType) {
+      case 'MaterialIcons':
+        return <MaterialIcons name={iconName} size={size} color={color} />;
+      case 'FontAwesome':
+        return <FontAwesome name={iconName} size={size} color={color} />;
+      case 'Ionicons':
+        return <Ionicons name={iconName} size={size} color={color} />;
+      case 'AntDesign':
+        return <AntDesign name={iconName} size={size} color={color} />;
+      case 'FontAwesome5':
+        return <FontAwesome5 name={iconName} size={size} color={color} />;
       default:
-        return '#059669';
+        return <Feather name={iconName} size={size} color={color} />;
     }
-  };
+  }, []);
 
-  const getRiskColor = (risk) => {
-    switch (risk.toLowerCase()) {
-      case 'low':
-        return '#10B981';
-      case 'moderate':
-        return '#F59E0B';
-      case 'high':
-        return '#EF4444';
-      default:
-        return '#6B7280';
+  return (
+    <TouchableOpacity
+      style={[
+        styles.categoryPill,
+        selected && styles.categoryPillActive,
+      ]}
+      onPress={() => onPress(item.name)}
+      activeOpacity={0.7}>
+      {renderIcon(
+        item.iconType,
+        item.icon,
+        16,
+        selected ? '#fff' : '#666'
+      )}
+      <Text
+        style={[
+          styles.categoryText,
+          selected && styles.categoryTextActive,
+        ]}>
+        {item.name}
+      </Text>
+    </TouchableOpacity>
+  );
+});
+
+// Categories
+const categories = [
+  { id: '1', name: 'All', icon: 'pie-chart', iconType: 'Feather' },
+  { id: '2', name: 'EQUITY', icon: 'trending-up', iconType: 'Feather' },
+  { id: '3', name: 'DEBT', icon: 'shield', iconType: 'Feather' },
+  { id: '4', name: 'HYBRID', icon: 'layers', iconType: 'Feather' },
+  { id: '5', name: 'OTHERS', icon: 'grid', iconType: 'Feather' },
+];
+
+const MAX_FUNDS_LIMIT = 500; // Maximum funds to load
+
+const Index = () => {
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [funds, setFunds] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [limit] = useState(500);
+  const [hasMore, setHasMore] = useState(true);
+  const [allFunds, setAllFunds] = useState([]);
+  const [isLoadingFirstTime, setIsLoadingFirstTime] = useState(true);
+  
+  const router = useRouter();
+  const isMounted = useRef(true);
+  const flatListRef = useRef(null);
+
+  const getFundsList = useCallback(async (currentOffset = 0, isRefresh = false) => {
+    try {
+      if (isRefresh) {
+        setRefreshing(true);
+      } else if (currentOffset === 0 && !isRefresh) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
+
+      console.log("Fetching with offset:", currentOffset, "Limit:", limit);
+      
+      const response = await axios.get(
+        `https://oglonbssd2.execute-api.ap-south-1.amazonaws.com/prod/investments/schemedetails?offset=${currentOffset}&limit=${limit}`
+      );
+      console.log("one time")
+      
+      const mainResponse = response.data.data.data;
+      const mappedFunds = [];
+
+      // Iterate through each category (EQUITY, DEBT, HYBRID, OTHERS)
+      Object.entries(mainResponse).forEach(([categoryType, schemes]) => {
+        if (Array.isArray(schemes)) {
+          schemes.forEach((scheme, index) => {
+            const mappedFund = {
+              id: scheme.id?.toString() || `fund-${categoryType}-${index}-${currentOffset}-${Date.now()}`,
+              name: scheme.plan_name || scheme.scheme_code || 'Unnamed Fund',
+              category: categoryType,
+              returns: getRandomReturns(),
+              returnPeriod: '3Y',
+              risk: getRiskFromCategory(categoryType),
+              minSip: getRandomMinSip(),
+              tags: getTagsFromScheme(scheme),
+              
+              // Additional data from API
+              schemeData: {
+                scheme_code: scheme.scheme_code,
+                fund_code: scheme.fund_code,
+                amc_name: scheme.amc_name,
+                image: scheme.image,
+                category: scheme.category || categoryType,
+                scheme_type: scheme.scheme_type,
+                plan_type: scheme.plan_type,
+                plan_opt: scheme.plan_opt,
+                nav: scheme.nav,
+                exit_load: scheme.exit_load,
+                sip_allowed: scheme.sip_allowed,
+                amfi_scheme_code: scheme.amfi_scheme_code,
+              }
+            };
+            
+            mappedFunds.push(mappedFund);
+          });
+        }
+      });
+
+      if (isRefresh) {
+        setAllFunds(mappedFunds);
+        setFunds(mappedFunds);
+      } else if (currentOffset === 0) {
+        setAllFunds(mappedFunds);
+        setFunds(mappedFunds);
+      } else {
+        setAllFunds(prev => [...prev, ...mappedFunds]);
+        setFunds(prev => [...prev, ...mappedFunds]);
+      }
+
+      // Check if we have more data to load
+      const totalFunds = isRefresh ? mappedFunds.length : allFunds.length + mappedFunds.length;
+      const hasMoreData = mappedFunds.length === limit;
+      setHasMore(hasMoreData && totalFunds < MAX_FUNDS_LIMIT);
+      
+      if (isLoadingFirstTime) {
+        setIsLoadingFirstTime(false);
+      }
+
+    } catch(error) {
+      console.error('Error fetching funds:', error);
+      setHasMore(false);
+    } finally {
+      if (isRefresh) {
+        setRefreshing(false);
+      } else if (currentOffset === 0 && !isRefresh) {
+        setLoading(false);
+      } else {
+        // Add a small delay to show loading indicator
+        setTimeout(() => {
+          setLoadingMore(false);
+        }, 500);
+      }
     }
-  };
+  }, [limit, allFunds.length, isLoadingFirstTime]);
+
+  // Helper functions
+  const getRandomReturns = useCallback(() => {
+    const returns = [12.5, 14.2, 16.8, 18.4, 20.1, 22.5, 24.8, 26.3];
+    return `${returns[Math.floor(Math.random() * returns.length)]}%`;
+  }, []);
+
+  const getRandomMinSip = useCallback(() => {
+    const sips = [500, 1000, 2000, 3000, 5000];
+    return sips[Math.floor(Math.random() * sips.length)];
+  }, []);
+
+  const getRiskFromCategory = useCallback((categoryType) => {
+    switch(categoryType) {
+      case 'EQUITY': return 'High';
+      case 'DEBT': return 'Low';
+      case 'HYBRID': return 'Moderate';
+      default: return 'Moderate';
+    }
+  }, []);
+
+  const getTagsFromScheme = useCallback((scheme) => {
+    const tags = [];
+    
+    if (scheme.exit_load === 'NIL') {
+      tags.push('🛡️ No Exit Load');
+    }
+    
+    if (scheme.sip_allowed) {
+      tags.push('📅 SIP Available');
+    }
+    
+    return tags.slice(0, 2);
+  }, []);
+
+  useEffect(() => {
+    getFundsList(0);
+    
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+
+  const handleCategorySelect = useCallback((category) => {
+    setSelectedCategory(category);
+    
+    if (category === 'All') {
+      setFunds(allFunds);
+    } else {
+      const filteredFunds = allFunds.filter((fund) =>
+        fund.category.toLowerCase() === category.toLowerCase()
+      );
+      setFunds(filteredFunds);
+    }
+    
+    // Scroll to top when category changes
+    if (flatListRef.current) {
+      flatListRef.current.scrollToOffset({ offset: 0, animated: true });
+    }
+  }, [allFunds]);
+
+  const handleLoadMore = useCallback(() => {
+    if (!loadingMore && hasMore && !loading && !refreshing) {
+      // Prevent fetching if we've already loaded the maximum amount
+      if (allFunds.length >= MAX_FUNDS_LIMIT) {
+        setHasMore(false);
+        return;
+      }
+      
+      const nextOffset = allFunds.length;
+      console.log("Loading more with offset:", nextOffset, "Total funds:", allFunds.length);
+      getFundsList(nextOffset);
+    }
+  }, [loadingMore, hasMore, loading, refreshing, allFunds.length, getFundsList]);
+
+  const onRefresh = useCallback(() => {
+    setHasMore(true);
+    getFundsList(0, true);
+  }, [getFundsList]);
+
+  const handleMF = useCallback(() => {
+    router.push("products/investments/mf/portpolio");
+  }, []);
+
+  const handleInvestPress = useCallback((fund) => {
+    router.push({
+      pathname: "products/investments/mf/funddetail",
+      params: { fundData: JSON.stringify(fund) }
+    });
+  }, []);
+
+  const renderCategoryItem = useCallback(({ item }) => (
+    <CategoryPill
+      item={item}
+      selected={selectedCategory === item.name}
+      onPress={handleCategorySelect}
+    />
+  ), [selectedCategory, handleCategorySelect]);
+
+  const renderFundCard = useCallback(({ item }) => (
+    <FundCard item={item} onPress={handleInvestPress} />
+  ), [handleInvestPress]);
+
+  const renderFooter = useCallback(() => {
+    if (!loadingMore) {
+      if (!hasMore && allFunds.length > 0) {
+        return (
+          <View style={styles.endReachedContainer}>
+            <Text style={styles.endReachedText}>No more funds to load</Text>
+          </View>
+        );
+      }
+      return null;
+    }
+    
+    return (
+      <View style={styles.loadingMoreContainer}>
+        <ActivityIndicator size="large" color="#1A365D" />
+        <Text style={styles.loadingMoreText}>Loading more funds...</Text>
+      </View>
+    );
+  }, [loadingMore, hasMore, allFunds.length]);
+
+  const renderHeader = useCallback(() => (
+    <>
+      {/* Fund Categories Section */}
+      <View style={styles.categoriesSection}>
+        <Text style={styles.sectionTitle}>Browse by Category</Text>
+        <FlatList
+          horizontal
+          data={categories}
+          renderItem={renderCategoryItem}
+          keyExtractor={(item) => item.id}
+          showsHorizontalScrollIndicator={false}
+          style={styles.categoriesList}
+        />
+      </View>
+
+      {/* Top Funds Section Header */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>
+          {selectedCategory === 'All' ? 'All Funds' : `Top Funds in ${selectedCategory}`}
+        </Text>
+        {allFunds.length > 0 && (
+          <TouchableOpacity style={styles.browseAll} activeOpacity={0.7}>
+            <Text style={styles.browseAllText}>Browse All</Text>
+            <Feather name="chevron-right" size={16} color="#1A365D" />
+          </TouchableOpacity>
+        )}
+      </View>
+    </>
+  ), [selectedCategory, allFunds.length, renderCategoryItem]);
+
+  const keyExtractor = useCallback((item) => item.id, []);
+
+  const getItemLayout = useCallback((data, index) => ({
+    length: 200, // Approximate height of each item
+    offset: 200 * index,
+    index,
+  }), []);
+
+  if (loading && allFunds.length === 0 && isLoadingFirstTime) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+        
+        {/* Portfolio Header Skeleton */}
+        <View style={styles.portfolioHeader}>
+          <View style={styles.portfolioContainer}>
+            <View style={[styles.skeletonLine, { width: 100, height: 16, marginBottom: 4 }]} />
+            <View style={[styles.skeletonLine, { width: 150, height: 32, marginBottom: 20 }]} />
+            
+            <View style={styles.portfolioItems}>
+              <View style={styles.portfolioItem}>
+                <View style={styles.portfolioItemLeft}>
+                  <View style={[styles.skeletonLine, { width: 20, height: 20, borderRadius: 10 }]} />
+                  <View style={[styles.skeletonLine, { width: 120, height: 16, marginLeft: 12 }]} />
+                </View>
+                <View style={styles.portfolioItemRight}>
+                  <View style={[styles.skeletonLine, { width: 80, height: 16, marginRight: 8 }]} />
+                  <View style={[styles.skeletonLine, { width: 16, height: 16 }]} />
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        <FlatList
+          style={styles.flatList}
+          contentContainerStyle={styles.flatListContent}
+          data={[1, 2, 3]}
+          renderItem={() => <FundCardSkeleton />}
+          keyExtractor={(item) => item.toString()}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+            <>
+              <View style={styles.categoriesSection}>
+                <View style={[styles.skeletonLine, { width: 200, height: 20, marginBottom: 16 }]} />
+                <FlatList
+                  horizontal
+                  data={[1, 2, 3, 4, 5]}
+                  renderItem={() => <CategoryPillSkeleton />}
+                  keyExtractor={(item) => item.toString()}
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.categoriesList}
+                />
+              </View>
+              <View style={styles.sectionHeader}>
+                <View style={[styles.skeletonLine, { width: 180, height: 20 }]} />
+                <View style={[styles.skeletonLine, { width: 100, height: 16 }]} />
+              </View>
+            </>
+          }
+          ItemSeparatorComponent={() => <View style={styles.fundSeparator} />}
+        />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -274,92 +578,69 @@ const Index = () => {
 
       {/* Portfolio Header Section */}
       <View style={styles.portfolioHeader}>
-        
         <View style={styles.portfolioContainer}>
           <Text style={styles.portfolioLabel}>My portfolio</Text>
           <Text style={styles.portfolioValue}>₹670.61</Text>
           
           <View style={styles.portfolioItems}>
-            <TouchableOpacity onPress={handleMF} style={styles.portfolioItem}>
+            <TouchableOpacity onPress={handleMF} style={styles.portfolioItem} activeOpacity={0.7}>
               <View style={styles.portfolioItemLeft}>
                 <MaterialIcons name="account-balance" size={20} color="#1A365D" />
                 <Text style={styles.portfolioItemText}>Mutual Fund</Text>
               </View>
               <View style={styles.portfolioItemRight}>
-                <Text style={styles.portfolioItemValue}>₹1006760</Text>
+                <Text style={styles.portfolioItemValue}>₹1,00,676</Text>
                 <Feather name="chevron-right" size={16} color="#6B7280" />
               </View>
             </TouchableOpacity>
-            
           </View>
-
         </View>
       </View>
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Fund Categories Section - Moved to top after portfolio */}
-        <View style={styles.categoriesSection}>
-          <Text style={styles.sectionTitle}>Browse by Category</Text>
-          <FlatList
-            horizontal
-            data={categories}
-            renderItem={renderCategoryItem}
-            keyExtractor={(item) => item.id}
-            showsHorizontalScrollIndicator={false}
-            style={styles.categoriesList}
+      <FlatList
+        ref={flatListRef}
+        style={styles.flatList}
+        contentContainerStyle={styles.flatListContent}
+        data={funds}
+        renderItem={renderFundCard}
+        keyExtractor={keyExtractor}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#1A365D']}
+            tintColor="#1A365D"
           />
+        }
+        ListHeaderComponent={renderHeader}
+        ListFooterComponent={renderFooter}
+        onEndReached={handleLoadMore}
+        onEndReachedThreshold={0.3}
+        ItemSeparatorComponent={() => <View style={styles.fundSeparator} />}
+        ListEmptyComponent={
+          !loading && !refreshing && (
+            <View style={styles.emptyContainer}>
+              <MaterialIcons name="search-off" size={48} color="#9CA3AF" />
+              <Text style={styles.emptyText}>No funds found</Text>
+            </View>
+          )
+        }
+        maxToRenderPerBatch={5}
+        windowSize={5}
+        removeClippedSubviews={true}
+        initialNumToRender={5}
+        updateCellsBatchingPeriod={50}
+        getItemLayout={getItemLayout}
+      />
+
+      {/* Full screen loading indicator for initial load */}
+      {loading && allFunds.length === 0 && !isLoadingFirstTime && (
+        <View style={styles.fullScreenLoading}>
+          <ActivityIndicator size="large" color="#1A365D" />
+          <Text style={styles.fullScreenLoadingText}>Loading funds...</Text>
         </View>
-
-        {/* Top Funds Section */}
-        <View style={styles.fundsSection}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>
-              Top Funds in {selectedCategory}
-            </Text>
-            <TouchableOpacity style={styles.browseAll}>
-              <Text style={styles.browseAllText}>Browse All Funds</Text>
-              <Feather name="chevron-right" size={16} color="#1A365D" />
-            </TouchableOpacity>
-          </View>
-
-          <FlatList
-            data={funds.slice(0, 5)} // Show max 5 funds
-            renderItem={renderFundCard}
-            keyExtractor={(item) => item.id}
-            scrollEnabled={false}
-            ItemSeparatorComponent={() => <View style={styles.fundSeparator} />}
-          />
-        </View>
-
-        {/* Extra Info Cards */}
-        <View style={styles.infoCards}>
-          <View style={styles.infoCard}>
-            <MaterialIcons name="emoji-events" size={24} color="#1A365D" />
-            <Text style={styles.infoCardTitle}>Expert Curated</Text>
-            <Text style={styles.infoCardDesc}>
-              Handpicked by investment specialists
-            </Text>
-          </View>
-
-          <View style={styles.infoCard}>
-            <FontAwesome name="star" size={24} color="#1A365D" />
-            <Text style={styles.infoCardTitle}>Lowest Fees</Text>
-            <Text style={styles.infoCardDesc}>
-              Zero commission on investments
-            </Text>
-          </View>
-        </View>
-
-        {/* Disclaimer */}
-        <View style={styles.disclaimer}>
-          <Feather name="alert-circle" size={16} color="#6B7280" />
-          <Text style={styles.disclaimerText}>
-            Mutual fund investments are subject to market risks. Read all scheme
-            related documents carefully.
-          </Text>
-        </View>
-      </ScrollView>
-      
+      )}
     </SafeAreaView>
   );
 };
@@ -375,20 +656,6 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
-  },
-  timeContainer: {
-    position: 'absolute',
-    top: 16,
-    left: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  timeText: {
-    fontSize: 14,
-    color: '#fff',
-    fontWeight: '500',
   },
   portfolioContainer: {
     paddingHorizontal: 20,
@@ -436,27 +703,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginRight: 8,
   },
-  repeatOrderButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-  },
-  repeatOrderText: {
-    fontSize: 16,
-    color: '#1A365D',
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  scrollView: {
+  flatList: {
     flex: 1,
+  },
+  flatListContent: {
+    paddingBottom: 20,
   },
   categoriesSection: {
     paddingHorizontal: 20,
     paddingTop: 24,
+    paddingBottom: 8,
   },
   sectionTitle: {
     fontSize: 18,
@@ -491,15 +747,13 @@ const styles = StyleSheet.create({
   categoryTextActive: {
     color: '#fff',
   },
-  fundsSection: {
-    paddingHorizontal: 20,
-    paddingTop: 24,
-  },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 8,
   },
   browseAll: {
     flexDirection: 'row',
@@ -517,27 +771,63 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: '#E5E7EB',
+    marginHorizontal: 20,
   },
   fundCardHeader: {
-    marginBottom: 16,
-  },
-  fundNameContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  fundHeaderLeft: {
+    flexDirection: 'row',
+    flex: 1,
+    marginRight: 12,
+  },
+  fundImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  fundImagePlaceholder: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  fundTitleContainer: {
+    flex: 1,
   },
   fundName: {
     fontSize: 16,
     fontWeight: '600',
     color: '#1F2937',
-    flex: 1,
-    marginRight: 8,
+    lineHeight: 22,
+    marginBottom: 4,
+  },
+  fundCodeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  fundCode: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  amcName: {
+    fontSize: 12,
+    color: '#6B7280',
   },
   categoryBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
+    alignSelf: 'flex-start',
   },
   categoryBadgeText: {
     fontSize: 12,
@@ -547,6 +837,7 @@ const styles = StyleSheet.create({
   tagsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    marginBottom: 12,
   },
   tag: {
     backgroundColor: '#FEF3C7',
@@ -580,11 +871,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  returnsText: {
+  navText: {
     fontSize: 16,
     fontWeight: '700',
     color: '#10B981',
     marginLeft: 4,
+  },
+  returnsText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#10B981',
   },
   statDivider: {
     width: 1,
@@ -600,11 +896,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#fff',
-  },
-  expenseRatio: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
   },
   fundCardFooter: {
     flexDirection: 'row',
@@ -643,75 +934,113 @@ const styles = StyleSheet.create({
   fundSeparator: {
     height: 12,
   },
-  infoCards: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    marginTop: 24,
-    marginBottom: 24,
-  },
-  infoCard: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 12,
-    padding: 16,
-    marginRight: 12,
+  emptyContainer: {
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
   },
-  infoCardTitle: {
+  emptyText: {
+    fontSize: 16,
+    color: '#9CA3AF',
+    marginTop: 12,
+  },
+  // Loading styles
+  loadingMoreContainer: {
+    flexDirection: 'column',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 30,
+    backgroundColor: '#fff',
+    marginTop: 10,
+    marginHorizontal: 20,
+    borderRadius: 12,
+  },
+  loadingMoreText: {
+    marginTop: 12,
+    color: '#1A365D',
     fontSize: 14,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginTop: 8,
-    marginBottom: 4,
+    fontWeight: '500',
   },
-  infoCardDesc: {
-    fontSize: 12,
-    color: '#6B7280',
-    textAlign: 'center',
+  endReachedContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 20,
+    marginHorizontal: 20,
   },
-  disclaimer: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingHorizontal: 20,
-    paddingBottom: 100,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-    marginTop: 8,
+  endReachedText: {
+    color: '#9CA3AF',
+    fontSize: 14,
   },
-  disclaimerText: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginLeft: 8,
-    flex: 1,
-    lineHeight: 16,
-  },
-  stickyFooter: {
+  fullScreenLoading: {
     position: 'absolute',
-    bottom: 0,
+    top: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#fff',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  ctaButton: {
-    backgroundColor: '#1A365D',
-    borderRadius: 12,
-    paddingVertical: 16,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  ctaText: {
+  fullScreenLoadingText: {
+    marginTop: 12,
+    color: '#1A365D',
     fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
+    fontWeight: '500',
+  },
+  // Skeleton styles
+  skeletonCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    marginHorizontal: 20,
+  },
+  skeletonHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 4,
+  },
+  skeletonLine: {
+    backgroundColor: '#E5E7EB',
+    borderRadius: 4,
+  },
+  skeletonTags: {
+    flexDirection: 'row',
+    marginTop: 8,
+  },
+  skeletonStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginVertical: 16,
+    paddingHorizontal: 8,
+  },
+  skeletonStat: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  skeletonDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: '#F3F4F6',
+  },
+  skeletonFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  skeletonCategoryPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 24,
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
 });
 

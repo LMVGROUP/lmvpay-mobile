@@ -6,10 +6,13 @@ import {
     StyleSheet,
     StatusBar,
     Dimensions,
+    Animated,
+    Image,
+    ActivityIndicator,
 } from 'react-native';
-import React, { useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
     Feather,
     MaterialIcons,
@@ -21,12 +24,30 @@ import {
     Entypo,
 } from '@expo/vector-icons';
 import Svg, { Path, Line, Circle, G, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
+import axios from 'axios';
 
 const { width } = Dimensions.get('window');
 
 const FundDetail = () => {
     const router = useRouter();
+    const params = useLocalSearchParams();
+    const fundResponse = params.fundData ? JSON.parse(params.fundData) : null;
+    
+    const [isLoading, setIsLoading] = useState(true);
+    const [fundInfo, setFundInfo] = useState(null);
+    const [imageError, setImageError] = useState(false);
+    const fadeAnim = useRef(new Animated.Value(0)).current;
+    
+    const fundSchemeCode = fundResponse?.schemeData?.scheme_code;
     const [selectedPeriod, setSelectedPeriod] = useState('1Y');
+    const [selectedGraphData, setSelectedGraphData] = useState([]);
+    const [selectedNavInfo, setSelectedNavInfo] = useState({
+        nav: null,
+        date: null,
+        percentChange: null,
+        absoluteChange: null
+    });
+    
     const [expandedSections, setExpandedSections] = useState({
         calculator: false,
         holdings: false,
@@ -37,150 +58,295 @@ const FundDetail = () => {
         prosCons: false,
     });
 
+    const getFundInfo = async () => {
+        setIsLoading(true);
+        try {
+            const response = await axios.get(`https://oglonbssd2.execute-api.ap-south-1.amazonaws.com/prod/investments/schemehistory/${fundSchemeCode}`);
+            console.log(response.data, "fund info");
+            setFundInfo(response.data);
+            
+            // Set default selected period to 1Y and load its data
+            if (response.data?.data?.graph) {
+                handlePeriodChange('1Y', response.data.data.graph);
+            }
+            
+            Animated.timing(fadeAnim, {
+                toValue: 1,
+                duration: 500,
+                useNativeDriver: true,
+            }).start();
+            
+        } catch (error) {
+            console.log(error, "error fetching fund info");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (fundSchemeCode) {
+            getFundInfo();
+        }
+    }, []);
+
+    // Handle period change and update graph data
+    const handlePeriodChange = (period, graphData) => {
+        setSelectedPeriod(period);
+        
+        if (!graphData && fundInfo?.data?.graph) {
+            graphData = fundInfo.data.graph;
+        }
+        
+        if (graphData) {
+            let periodData = [];
+            let periodKey = '';
+            
+            switch(period) {
+                case '3M':
+                    periodData = graphData.threeMonths || [];
+                    periodKey = 'threeMonths';
+                    break;
+                case '6M':
+                    periodData = graphData.sixMonths || [];
+                    periodKey = 'sixMonths';
+                    break;
+                case '1Y':
+                    periodData = graphData.oneYear || [];
+                    periodKey = 'oneYear';
+                    break;
+                case '3Y':
+                    periodData = graphData.threeYear || [];
+                    periodKey = 'threeYear';
+                    break;
+                case 'ALL':
+                    periodData = graphData.max || [];
+                    periodKey = 'max';
+                    break;
+                default:
+                    periodData = graphData.oneYear || [];
+                    periodKey = 'oneYear';
+            }
+            
+            setSelectedGraphData(periodData);
+            
+            // Set latest NAV info from the period data
+            if (periodData && periodData.length > 0) {
+                const latest = periodData[periodData.length - 1];
+                const first = periodData[0];
+                const absoluteChange = latest.nav - first.nav;
+                const percentChange = ((latest.nav - first.nav) / first.nav * 100).toFixed(2);
+                
+                setSelectedNavInfo({
+                    nav: latest.nav,
+                    date: latest.date,
+                    percentChange: percentChange,
+                    absoluteChange: absoluteChange
+                });
+            }
+        }
+    };
+
+    // Format date for display
+    const formatDate = (dateString) => {
+        if (!dateString) return '';
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-IN', { 
+            day: 'numeric', 
+            month: 'short', 
+            year: 'numeric' 
+        });
+    };
+
+    // Get return for selected period
+    const getPeriodReturn = (period) => {
+        if (!fundInfo?.data?.returns) return null;
+        
+        switch(period) {
+            case '3M':
+                return fundInfo.data.returns.threeMonths;
+            case '6M':
+                return fundInfo.data.returns.sixMonths;
+            case '1Y':
+                return fundInfo.data.returns.oneYear;
+            case '3Y':
+                return fundInfo.data.returns.threeYear;
+            case 'ALL':
+                return fundInfo.data.returns.max;
+            default:
+                return null;
+        }
+    };
+
+    // Static data (will be replaced later)
     const fundData = {
-        name: 'SBI Gold ETF Direct Plan Growth',
-        category: 'Commodities · Gold',
-        risk: 'Very High Risk',
-        rating: 4,
-        nav: 20.88,
-        navDate: '21 Mar 2024',
-        oneDayChange: '+7.88%',
-        annualizedReturn: '13.15%',
-        currentPrice: 100.28,
-        changePercentage: 100.28,
+        name: fundResponse?.name || 'Edelweiss Technology Fund Regular Growth',
+        category: fundResponse?.schemeData?.category || 'Equity · Technology',
+        risk: fundResponse?.risk || 'High Risk',
+        nav: fundResponse?.schemeData?.nav || 11.8688,
+        navDate: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+        oneDayChange: selectedNavInfo.percentChange ? `${parseFloat(selectedNavInfo.percentChange) > 0 ? '+' : ''}${selectedNavInfo.percentChange}%` : '+0.00%',
+        annualizedReturn: fundResponse?.returns || '24.8%',
+        currentPrice: selectedNavInfo.nav || fundResponse?.schemeData?.nav || 11.8688,
+        changePercentage: selectedNavInfo.percentChange || '0.00',
+        minSip: fundResponse?.minSip || 3000,
+        planOpt: fundResponse?.schemeData?.plan_opt || 'GR',
+        planType: fundResponse?.schemeData?.plan_type || 'REG',
+        amfiCode: fundResponse?.schemeData?.amfi_scheme_code || '152439',
+        image: fundResponse?.schemeData?.image,
+        exitLoad: fundResponse?.schemeData?.exit_load || '1% if redeemed /switched on or before 90 day',
 
         returns: {
-            '1Y': 115.9,
-            '3Y': 44.3,
+            '1Y': fundInfo?.data?.returns?.oneYear || 1.75,
+            '3Y': fundInfo?.data?.returns?.threeYear || fundResponse?.returns ? parseFloat(fundResponse.returns) : 24.8,
             '5Y': 28.2,
-            'All': 13.2
+            'All': fundInfo?.data?.returns?.max || 18.26
         },
         categoryAvg: {
-            '1Y': 76.0,
-            '3Y': 34.1,
+            '1Y': 15.2,
+            '3Y': 18.5,
             '5Y': 21.0,
-            'All': '-'
+            'All': 16.8
         },
         rankings: {
-            '1Y': 7,
-            '3Y': 4,
-            '5Y': 2,
-            'All': '-'
+            '1Y': 12,
+            '3Y': 8,
+            '5Y': 5,
+            'All': 10
         },
 
-        expenseRatio: '0.24%',
-        exitLoad: '1% if redeemed within 15 days',
+        expenseRatio: '1.05%',
+        exitLoad: fundResponse?.schemeData?.exit_load || '1% if redeemed within 90 days',
         stampDuty: '0.005% (from July 1st, 2020)',
-        taxImplication: 'If you redeem within two years, returns are taxed as per your Income Tax slab. If you redeem after two years, returns are taxed at 12.5%.',
+        taxImplication: 'If you redeem within three years, returns are taxed as per your Income Tax slab. If you redeem after three years, returns are taxed at 20% with indexation benefit.',
 
-        fundSize: '₹10,775 Cr',
-        minSipAmount: '₹500',
+        fundSize: '₹1,275 Cr',
+        minSipAmount: `₹${fundResponse?.minSip || 3000}`,
 
         sipCalculator: {
-            investment: 60000,
-            returns: 80692,
-            percentage: 34.49
+            investment: 36000,
+            returns: 48200,
+            percentage: 33.89
         },
 
         holdings: [
-            { name: 'Gold Bullion', percentage: '92.5%' },
-            { name: 'Gold ETFs', percentage: '5.2%' },
-            { name: 'Cash & Equivalents', percentage: '2.3%' }
+            { name: 'Infosys Ltd', percentage: '8.5%' },
+            { name: 'TCS Ltd', percentage: '7.8%' },
+            { name: 'HCL Technologies', percentage: '6.2%' }
         ],
 
         fundManager: {
-            name: 'Rahul Sharma',
-            role: 'Fund Manager - Gold & Commodities',
-            experience: '8 years of experience'
+            name: 'Anand Shah',
+            role: 'Fund Manager - Technology',
+            experience: '12 years of experience'
         },
 
-        fundHouse: 'SBI Mutual Fund',
-        investmentObjective: 'The investment objective of the scheme is to provide returns that closely correspond to the returns provided by SBI Gold ETF.',
-        
+        fundHouse: 'Edelweiss Mutual Fund',
+        investmentObjective: 'The investment objective of the scheme is to generate long-term capital appreciation by investing predominantly in equity and equity related instruments of technology and technology related companies.',
+
         pros: [
-            'High liquidity',
-            'Low expense ratio',
-            'Direct gold exposure',
-            'No wealth tax'
+            'Focus on high-growth tech sector',
+            'Experienced fund management team',
+            'Well-diversified tech portfolio',
+            'Long-term capital appreciation potential'
         ],
         cons: [
-            'High risk',
-            'No dividend option',
-            'Market timing risk',
-            'No capital guarantee'
+            'High risk due to sector concentration',
+            'Volatile returns',
+            'No regular income',
+            'Sensitive to global tech trends'
         ]
     };
 
-    const toggleSection = (section) => {
-        setExpandedSections(prev => ({
-            ...prev,
-            [section]: !prev[section]
-        }));
+    // Skeleton Loader Component
+    const SkeletonLoader = () => (
+        <View style={styles.skeletonContainer}>
+            <View style={styles.skeletonHeader}>
+                <View style={styles.skeletonBackButton} />
+                <View style={styles.skeletonHeaderTitle} />
+                <View style={styles.skeletonHeaderButton} />
+            </View>
+            
+            <View style={styles.skeletonContent}>
+                <View style={styles.skeletonFundHeader}>
+                    <View style={styles.skeletonTitleRow}>
+                        <View style={styles.skeletonIcon} />
+                        <View style={styles.skeletonFundInfo}>
+                            <View style={styles.skeletonFundName} />
+                            <View style={styles.skeletonFundMeta} />
+                        </View>
+                    </View>
+                    <View style={styles.skeletonNavRow}>
+                        <View style={styles.skeletonNavLabel} />
+                        <View style={styles.skeletonNavValue} />
+                    </View>
+                    <View style={styles.skeletonReturnRow}>
+                        <View style={styles.skeletonAnnualReturn} />
+                        <View style={styles.skeletonDayChange} />
+                    </View>
+                </View>
+
+                <View style={styles.skeletonGraph}>
+                    <View style={styles.skeletonPeriodTabs}>
+                        {[1, 2, 3, 4, 5, 6].map((item) => (
+                            <View key={item} style={styles.skeletonPeriodTab} />
+                        ))}
+                    </View>
+                    <View style={styles.skeletonGraphArea} />
+                </View>
+
+                <View style={styles.skeletonPriceCard} />
+
+                {[1, 2, 3, 4, 5, 6, 7].map((item) => (
+                    <View key={item} style={styles.skeletonSection}>
+                        <View style={styles.skeletonSectionHeader}>
+                            <View style={styles.skeletonSectionIcon} />
+                            <View style={styles.skeletonSectionTitle} />
+                            <View style={styles.skeletonSectionArrow} />
+                        </View>
+                    </View>
+                ))}
+            </View>
+        </View>
+    );
+
+    const getCategoryIcon = (category) => {
+        if (category?.toLowerCase().includes('technology')) {
+            return <FontAwesome5 name="microchip" size={28} color="#3B82F6" />;
+        } else if (category?.toLowerCase().includes('gold')) {
+            return <MaterialCommunityIcons name="gold" size={28} color="#F59E0B" />;
+        } else if (category?.toLowerCase().includes('equity')) {
+            return <FontAwesome5 name="chart-line" size={28} color="#059669" />;
+        } else {
+            return <MaterialCommunityIcons name="finance" size={28} color="#1A365D" />;
+        }
     };
 
-    // Graph data for different time periods
-    const graphData = {
-        '1M': [
-            { date: '1 Jan', value: 95.5 },
-            { date: '8 Jan', value: 96.2 },
-            { date: '15 Jan', value: 97.8 },
-            { date: '22 Jan', value: 98.5 },
-            { date: '29 Jan', value: 100.28 }
-        ],
-        '6M': [
-            { date: 'Jul', value: 85.0 },
-            { date: 'Aug', value: 88.2 },
-            { date: 'Sep', value: 91.5 },
-            { date: 'Oct', value: 93.8 },
-            { date: 'Nov', value: 96.4 },
-            { date: 'Dec', value: 98.7 },
-            { date: 'Jan', value: 100.28 }
-        ],
-        '1Y': [
-            { date: 'Jan', value: 82.4 },
-            { date: 'Mar', value: 85.6 },
-            { date: 'May', value: 88.9 },
-            { date: 'Jul', value: 91.2 },
-            { date: 'Sep', value: 94.5 },
-            { date: 'Nov', value: 97.8 },
-            { date: 'Jan', value: 100.28 }
-        ],
-        '3Y': [
-            { date: '2023', value: 75.4 },
-            { date: '2024', value: 82.6 },
-            { date: '2025', value: 91.8 },
-            { date: '2026', value: 100.28 }
-        ],
-        '5Y': [
-            { date: '2021', value: 65.2 },
-            { date: '2022', value: 70.4 },
-            { date: '2023', value: 75.6 },
-            { date: '2024', value: 82.8 },
-            { date: '2025', value: 91.0 },
-            { date: '2026', value: 100.28 }
-        ],
-        'ALL': [
-            { date: '2018', value: 50.0 },
-            { date: '2019', value: 55.2 },
-            { date: '2020', value: 60.4 },
-            { date: '2021', value: 65.6 },
-            { date: '2022', value: 70.8 },
-            { date: '2023', value: 75.0 },
-            { date: '2024', value: 82.2 },
-            { date: '2025', value: 91.4 },
-            { date: '2026', value: 100.28 }
-        ]
+    const getPlanTypeText = (planType) => {
+        return planType === 'REG' ? 'Regular' : 'Direct';
+    };
+
+    const getPlanOptText = (planOpt) => {
+        return planOpt === 'GR' ? 'Growth' : 'IDCW';
     };
 
     const renderGraph = () => {
-        const currentData = graphData[selectedPeriod] || graphData['1Y'];
+        const currentData = selectedGraphData.length > 0 ? selectedGraphData : [];
+        
+        if (currentData.length === 0) {
+            return (
+                <View style={[styles.graphContainer, { justifyContent: 'center', alignItems: 'center', height: 200 }]}>
+                    <Text style={{ color: '#6B7280' }}>No data available for this period</Text>
+                </View>
+            );
+        }
+
         const chartWidth = width - 80;
         const chartHeight = 200;
         const padding = 20;
         const pointRadius = 4;
 
         // Calculate min and max values
-        const values = currentData.map(d => d.value);
+        const values = currentData.map(d => d.nav);
         const minValue = Math.min(...values);
         const maxValue = Math.max(...values);
         const valueRange = maxValue - minValue;
@@ -195,7 +361,7 @@ const FundDetail = () => {
         let path = '';
         currentData.forEach((point, index) => {
             const x = padding + index * xStep;
-            const y = chartHeight - padding - (point.value - minValue) * yScale;
+            const y = chartHeight - padding - (point.nav - minValue) * yScale;
 
             if (index === 0) {
                 path = `M ${x} ${y}`;
@@ -208,6 +374,18 @@ const FundDetail = () => {
         let areaPath = path;
         areaPath += ` L ${padding + (currentData.length - 1) * xStep} ${chartHeight - padding}`;
         areaPath += ` L ${padding} ${chartHeight - padding} Z`;
+
+        // Format dates for display
+        const formatXAxisLabel = (dateString) => {
+            if (!dateString) return '';
+            if (selectedPeriod === '1Y' || selectedPeriod === '6M' || selectedPeriod === '3M') {
+                const date = new Date(dateString);
+                return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+            } else {
+                const date = new Date(dateString);
+                return date.getFullYear().toString();
+            }
+        };
 
         return (
             <View style={styles.graphContainer}>
@@ -239,7 +417,7 @@ const FundDetail = () => {
                     {/* Data points */}
                     {currentData.map((point, index) => {
                         const x = padding + index * xStep;
-                        const y = chartHeight - padding - (point.value - minValue) * yScale;
+                        const y = chartHeight - padding - (point.nav - minValue) * yScale;
 
                         return (
                             <G key={index}>
@@ -260,7 +438,7 @@ const FundDetail = () => {
                                     fill="#6B7280"
                                     textAnchor="middle"
                                 >
-                                    {point.date}
+                                    {formatXAxisLabel(point.date)}
                                 </SvgText>
                             </G>
                         );
@@ -294,7 +472,7 @@ const FundDetail = () => {
                                 fontSize="10"
                                 fill="#6B7280"
                             >
-                                ₹{value.toFixed(1)}
+                                ₹{value.toFixed(2)}
                             </SvgText>
                         );
                     })}
@@ -304,30 +482,18 @@ const FundDetail = () => {
                 <View style={styles.performanceIndicator}>
                     <View style={styles.performanceBadge}>
                         <MaterialIcons name="trending-up" size={16} color="#059669" />
-                        <Text style={styles.performanceText}>+{((maxValue - minValue) / minValue * 100).toFixed(1)}% growth</Text>
+                        <Text style={styles.performanceText}>
+                            {parseFloat(selectedNavInfo.percentChange) > 0 ? '+' : ''}
+                            {selectedNavInfo.percentChange}% growth
+                        </Text>
                     </View>
                 </View>
             </View>
         );
     };
 
-    const renderStars = (rating) => {
-        return (
-            <View style={styles.starContainer}>
-                {[1, 2, 3, 4, 5].map((star) => (
-                    <AntDesign
-                        key={star}
-                        name={star <= rating ? 'star' : 'star'}
-                        size={16}
-                        color={star <= rating ? '#FFC107' : '#CBD5E1'}
-                    />
-                ))}
-            </View>
-        );
-    };
-
     const renderPeriodTabs = () => {
-        const periods = ['1M', '6M', '1Y', '3Y', '5Y', 'ALL'];
+        const periods = ['3M', '6M', '1Y', '3Y', 'ALL'];
         return (
             <View style={styles.periodTabs}>
                 {periods.map((period) => (
@@ -337,7 +503,7 @@ const FundDetail = () => {
                             styles.periodTab,
                             selectedPeriod === period && styles.periodTabActive
                         ]}
-                        onPress={() => setSelectedPeriod(period)}
+                        onPress={() => handlePeriodChange(period, fundInfo?.data?.graph)}
                     >
                         <Text style={[
                             styles.periodTabText,
@@ -347,43 +513,6 @@ const FundDetail = () => {
                         </Text>
                     </TouchableOpacity>
                 ))}
-            </View>
-        );
-    };
-
-    const renderCollapsibleSection = (title, icon, sectionKey, content, badgeCount = null) => {
-        const isExpanded = expandedSections[sectionKey];
-        
-        return (
-            <View style={styles.sectionContainer}>
-                <TouchableOpacity 
-                    style={styles.sectionHeader}
-                    onPress={() => toggleSection(sectionKey)}
-                    activeOpacity={0.7}
-                >
-                    <View style={styles.sectionHeaderContent}>
-                        <View style={styles.sectionIcon}>
-                            {icon}
-                        </View>
-                        <Text style={styles.sectionTitle}>{title}</Text>
-                        {badgeCount !== null && (
-                            <View style={styles.badge}>
-                                <Text style={styles.badgeText}>{badgeCount}</Text>
-                            </View>
-                        )}
-                    </View>
-                    <MaterialIcons 
-                        name={isExpanded ? 'keyboard-arrow-up' : 'keyboard-arrow-down'} 
-                        size={24} 
-                        color="#64748B" 
-                    />
-                </TouchableOpacity>
-                
-                {isExpanded && (
-                    <View style={styles.sectionContent}>
-                        {content}
-                    </View>
-                )}
             </View>
         );
     };
@@ -399,28 +528,41 @@ const FundDetail = () => {
                     <Text style={styles.tableHeaderText}>Rank</Text>
                 </View>
                 
-                {['1Y', '3Y', '5Y', 'All'].map((period) => (
-                    <View key={period} style={styles.tableRow}>
-                        <Text style={styles.tableCell}>{period}</Text>
-                        <Text style={[styles.tableCell, styles.returnsValue]}>
-                            {fundData.returns[period]}%
-                        </Text>
-                        <Text style={styles.tableCell}>
-                            {fundData.categoryAvg[period] === '-' ? '-' : `${fundData.categoryAvg[period]}%`}
-                        </Text>
-                        <View style={[
-                            styles.rankBadge,
-                            fundData.rankings[period] <= 3 && styles.rankBadgeTop
-                        ]}>
-                            <Text style={[
-                                styles.rankText,
-                                fundData.rankings[period] <= 3 && styles.rankTextTop
-                            ]}>
-                                {fundData.rankings[period]}
+                {['1Y', '3Y', '5Y', 'All'].map((period) => {
+                    let returnValue = fundData.returns[period];
+                    if (period === '3Y' && fundInfo?.data?.returns?.threeYear) {
+                        returnValue = fundInfo.data.returns.threeYear;
+                    }
+                    if (period === '1Y' && fundInfo?.data?.returns?.oneYear) {
+                        returnValue = fundInfo.data.returns.oneYear;
+                    }
+                    if (period === 'All' && fundInfo?.data?.returns?.max) {
+                        returnValue = fundInfo.data.returns.max;
+                    }
+                    
+                    return (
+                        <View key={period} style={styles.tableRow}>
+                            <Text style={styles.tableCell}>{period}</Text>
+                            <Text style={[styles.tableCell, styles.returnsValue]}>
+                                {returnValue ? `${returnValue}%` : 'N/A'}
                             </Text>
+                            <Text style={styles.tableCell}>
+                                {fundData.categoryAvg[period] === '-' ? '-' : `${fundData.categoryAvg[period]}%`}
+                            </Text>
+                            <View style={[
+                                styles.rankBadge,
+                                fundData.rankings[period] <= 3 && styles.rankBadgeTop
+                            ]}>
+                                <Text style={[
+                                    styles.rankText,
+                                    fundData.rankings[period] <= 3 && styles.rankTextTop
+                                ]}>
+                                    {fundData.rankings[period]}
+                                </Text>
+                            </View>
                         </View>
-                    </View>
-                ))}
+                    );
+                })}
             </View>
             
             {/* Fund vs Category */}
@@ -428,7 +570,9 @@ const FundDetail = () => {
                 <Text style={styles.comparisonTitle}>Fund vs Category</Text>
                 <View style={styles.comparisonItem}>
                     <Text style={styles.comparisonLabel}>Fund Returns (3Y)</Text>
-                    <Text style={styles.comparisonValue}>{fundData.returns['3Y']}%</Text>
+                    <Text style={styles.comparisonValue}>
+                        {fundInfo?.data?.returns?.threeYear ? `${fundInfo.data.returns.threeYear}%` : `${fundData.returns['3Y']}%`}
+                    </Text>
                 </View>
                 <View style={styles.comparisonItem}>
                     <Text style={styles.comparisonLabel}>Category Avg (3Y)</Text>
@@ -442,60 +586,52 @@ const FundDetail = () => {
         </View>
     );
 
-    const renderCalculatorContent = () => {
-        const durations = [
-            { label: '1 year', value: 1 },
-            { label: '3 years', value: 3 },
-            { label: '5 years', value: 5 }
-        ];
+    const renderCalculatorContent = () => (
+        <View>
+            <View style={styles.calculatorTabs}>
+                <TouchableOpacity style={[styles.calcTab, styles.calcTabActive]}>
+                    <Text style={styles.calcTabText}>Monthly SIP</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.calcTab}>
+                    <Text style={styles.calcTabText}>One-Time</Text>
+                </TouchableOpacity>
+            </View>
 
-        return (
-            <View>
-                <View style={styles.calculatorTabs}>
-                    <TouchableOpacity style={[styles.calcTab, styles.calcTabActive]}>
-                        <Text style={styles.calcTabText}>Monthly SIP</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.calcTab}>
-                        <Text style={styles.calcTabText}>One-Time</Text>
-                    </TouchableOpacity>
-                </View>
-
-                <View style={styles.calculatorInput}>
-                    <Text style={styles.calcLabel}>Monthly investment amount</Text>
-                    <View style={styles.amountSlider}>
-                        <View style={styles.sliderTrack}>
-                            <View style={[styles.sliderProgress, { width: '60%' }]} />
-                        </View>
-                        <View style={styles.sliderLabels}>
-                            <Text style={styles.sliderLabel}>₹1,000</Text>
-                            <Text style={styles.sliderLabel}>₹10,000</Text>
-                        </View>
+            <View style={styles.calculatorInput}>
+                <Text style={styles.calcLabel}>Monthly investment amount</Text>
+                <View style={styles.amountSlider}>
+                    <View style={styles.sliderTrack}>
+                        <View style={[styles.sliderProgress, { width: '60%' }]} />
                     </View>
-                    
-                    <View style={styles.quickAmounts}>
-                        <TouchableOpacity style={styles.quickAmount}>
-                            <Text style={styles.quickAmountText}>₹1,000</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.quickAmount}>
-                            <Text style={styles.quickAmountText}>₹5,000</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.quickAmount}>
-                            <Text style={styles.quickAmountText}>₹10,000</Text>
-                        </TouchableOpacity>
+                    <View style={styles.sliderLabels}>
+                        <Text style={styles.sliderLabel}>₹1,000</Text>
+                        <Text style={styles.sliderLabel}>₹10,000</Text>
                     </View>
                 </View>
-
-                <View style={styles.calculatorResult}>
-                    <Text style={styles.resultTitle}>Projected value after 3 years</Text>
-                    <Text style={styles.resultValue}>₹{fundData.sipCalculator.returns.toLocaleString('en-IN')}</Text>
-                    <Text style={styles.resultSubtitle}>
-                        Investment: ₹{fundData.sipCalculator.investment.toLocaleString('en-IN')} • 
-                        Returns: +{fundData.sipCalculator.percentage}%
-                    </Text>
+                
+                <View style={styles.quickAmounts}>
+                    <TouchableOpacity style={styles.quickAmount}>
+                        <Text style={styles.quickAmountText}>₹1,000</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.quickAmount}>
+                        <Text style={styles.quickAmountText}>₹5,000</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.quickAmount}>
+                        <Text style={styles.quickAmountText}>₹10,000</Text>
+                    </TouchableOpacity>
                 </View>
             </View>
-        );
-    };
+
+            <View style={styles.calculatorResult}>
+                <Text style={styles.resultTitle}>Projected value after 3 years</Text>
+                <Text style={styles.resultValue}>₹{fundData.sipCalculator.returns.toLocaleString('en-IN')}</Text>
+                <Text style={styles.resultSubtitle}>
+                    Investment: ₹{fundData.sipCalculator.investment.toLocaleString('en-IN')} • 
+                    Returns: +{fundData.sipCalculator.percentage}%
+                </Text>
+            </View>
+        </View>
+    );
 
     const renderHoldingsContent = () => (
         <View>
@@ -610,6 +746,56 @@ const FundDetail = () => {
             </View>
         </View>
     );
+    // Move this function definition BEFORE the return statement, around line 350-400
+const renderCollapsibleSection = (title, icon, sectionKey, content, badgeCount = null) => {
+    const isExpanded = expandedSections[sectionKey];
+    
+    return (
+        <View style={styles.sectionContainer}>
+            <TouchableOpacity 
+                style={styles.sectionHeader}
+                onPress={() => toggleSection(sectionKey)}
+                activeOpacity={0.7}
+            >
+                <View style={styles.sectionHeaderContent}>
+                    <View style={styles.sectionIcon}>
+                        {icon}
+                    </View>
+                    <Text style={styles.sectionTitle}>{title}</Text>
+                    {badgeCount !== null && (
+                        <View style={styles.badge}>
+                            <Text style={styles.badgeText}>{badgeCount}</Text>
+                        </View>
+                    )}
+                </View>
+                <MaterialIcons 
+                    name={isExpanded ? 'keyboard-arrow-up' : 'keyboard-arrow-down'} 
+                    size={24} 
+                    color="#64748B" 
+                />
+            </TouchableOpacity>
+            
+            {isExpanded && (
+                <View style={styles.sectionContent}>
+                    {content}
+                </View>
+            )}
+        </View>
+    );
+};
+
+    const toggleSection = (section) => {
+        setExpandedSections(prev => ({
+            ...prev,
+            [section]: !prev[section]
+        }));
+    };
+
+    if (isLoading) {
+        return <SkeletonLoader />;
+    }
+
+    const periodReturn = getPeriodReturn(selectedPeriod);
 
     return (
         <SafeAreaView style={styles.container}>
@@ -631,21 +817,56 @@ const FundDetail = () => {
                 </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-                {/* Fund Header */}
+            <Animated.ScrollView 
+                style={[styles.content, { opacity: fadeAnim }]} 
+                showsVerticalScrollIndicator={false}
+            >
+                {/* Fund Header - Dynamic Data from Params */}
                 <View style={styles.fundHeader}>
                     <View style={styles.fundTitleRow}>
-                        <View style={styles.fundIcon}>
-                            <MaterialCommunityIcons name="gold" size={28} color="#F59E0B" />
+                        <View style={[styles.fundIcon, { backgroundColor: '#F1F5F9' }]}>
+                            {fundData.image && !imageError ? (
+                                <Image 
+                                    source={{ uri: fundData.image }}
+                                    style={styles.fundImage}
+                                    resizeMode="contain"
+                                    onError={() => setImageError(true)}
+                                />
+                            ) : (
+                                <View style={[styles.fallbackIcon, { backgroundColor: '#1A365D' }]}>
+                                    <Text style={styles.fundInitials}>
+                                        {fundData.name?.split(' ')
+                                            .map(word => word[0])
+                                            .filter(word => word)
+                                            .slice(0, 2)
+                                            .join('')
+                                            .toUpperCase()}
+                                    </Text>
+                                </View>
+                            )}
                         </View>
                         <View style={styles.fundNameContainer}>
                             <Text style={styles.fundName}>{fundData.name}</Text>
                             <View style={styles.fundMeta}>
-                                <View style={styles.riskBadge}>
-                                    <Ionicons name="alert-circle" size={14} color="#DC2626" />
-                                    <Text style={styles.riskText}>{fundData.risk}</Text>
+                                <View style={[styles.riskBadge, fundData.risk?.toLowerCase().includes('high') && styles.riskBadgeHigh]}>
+                                    <Ionicons name="alert-circle" size={14} color={fundData.risk?.toLowerCase().includes('high') ? '#DC2626' : '#059669'} />
+                                    <Text style={[styles.riskText, fundData.risk?.toLowerCase().includes('high') && styles.riskTextHigh]}>
+                                        {fundData.risk}
+                                    </Text>
                                 </View>
                                 <Text style={styles.categoryText}>• {fundData.category}</Text>
+                            </View>
+                            {/* Plan Details */}
+                            <View style={styles.planDetails}>
+                                <View style={styles.planBadge}>
+                                    <Text style={styles.planBadgeText}>{getPlanTypeText(fundData.planType)}</Text>
+                                </View>
+                                <View style={styles.planBadge}>
+                                    <Text style={styles.planBadgeText}>{getPlanOptText(fundData.planOpt)}</Text>
+                                </View>
+                                <View style={styles.amfiBadge}>
+                                    <Text style={styles.amfiBadgeText}>AMFI: {fundData.amfiCode}</Text>
+                                </View>
                             </View>
                         </View>
                     </View>
@@ -653,23 +874,42 @@ const FundDetail = () => {
                     <View style={styles.navContainer}>
                         <View style={styles.navRow}>
                             <Text style={styles.navLabel}>NAV</Text>
-                            <Text style={styles.navValue}>₹{fundData.nav}</Text>
-                            <Text style={styles.navDate}>{fundData.navDate}</Text>
-                        </View>
-                        <View style={styles.ratingContainer}>
-                            {renderStars(fundData.rating)}
-                            <Text style={styles.ratingText}>{fundData.rating} ★</Text>
+                            <Text style={styles.navValue}>
+                                ₹{selectedNavInfo.nav ? selectedNavInfo.nav.toFixed(4) : parseFloat(fundData.nav).toFixed(4)}
+                            </Text>
+                            <Text style={styles.navDate}>
+                                {selectedNavInfo.date ? formatDate(selectedNavInfo.date) : fundData.navDate}
+                            </Text>
                         </View>
                     </View>
 
                     <View style={styles.returnRow}>
                         <View style={styles.annualReturn}>
-                            <Text style={styles.annualReturnLabel}>Annualised</Text>
-                            <Text style={styles.annualReturnValue}>{fundData.annualizedReturn}</Text>
+                            <Text style={styles.annualReturnLabel}>
+                                {selectedPeriod} Return
+                            </Text>
+                            <Text style={[
+                                styles.annualReturnValue,
+                                periodReturn && periodReturn < 0 && styles.negativeReturn
+                            ]}>
+                                {periodReturn ? `${periodReturn > 0 ? '+' : ''}${periodReturn}%` : fundData.annualizedReturn}
+                            </Text>
                         </View>
-                        <View style={styles.dayChange}>
-                            <Feather name="trending-up" size={16} color="#10B981" />
-                            <Text style={styles.dayChangeText}>{fundData.oneDayChange}</Text>
+                        <View style={[
+                            styles.dayChange,
+                            parseFloat(selectedNavInfo.percentChange) < 0 && styles.negativeChange
+                        ]}>
+                            <Feather 
+                                name={parseFloat(selectedNavInfo.percentChange) >= 0 ? "trending-up" : "trending-down"} 
+                                size={16} 
+                                color={parseFloat(selectedNavInfo.percentChange) >= 0 ? "#10B981" : "#DC2626"} 
+                            />
+                            <Text style={[
+                                styles.dayChangeText,
+                                parseFloat(selectedNavInfo.percentChange) < 0 && styles.negativeChangeText
+                            ]}>
+                                {selectedNavInfo.percentChange ? `${parseFloat(selectedNavInfo.percentChange) > 0 ? '+' : ''}${selectedNavInfo.percentChange}%` : fundData.oneDayChange}
+                            </Text>
                         </View>
                     </View>
                 </View>
@@ -684,17 +924,34 @@ const FundDetail = () => {
                 <View style={styles.priceCard}>
                     <View style={styles.priceContent}>
                         <View>
-                            <Text style={styles.priceLabel}>Current Price</Text>
-                            <Text style={styles.priceValue}>₹{fundData.currentPrice}</Text>
+                            <Text style={styles.priceLabel}>Current NAV</Text>
+                            <Text style={styles.priceValue}>
+                                ₹{selectedNavInfo.nav ? selectedNavInfo.nav.toFixed(4) : fundData.currentPrice}
+                            </Text>
+                            <Text style={styles.priceDate}>
+                                as of {selectedNavInfo.date ? formatDate(selectedNavInfo.date) : fundData.navDate}
+                            </Text>
                         </View>
-                        <View style={styles.changeContainer}>
-                            <MaterialIcons name="show-chart" size={24} color="#10B981" />
-                            <Text style={styles.changePercentage}>{fundData.changePercentage}%</Text>
+                        <View style={[
+                            styles.changeContainer,
+                            parseFloat(selectedNavInfo.percentChange) < 0 && styles.negativeChangeContainer
+                        ]}>
+                            <MaterialIcons 
+                                name={parseFloat(selectedNavInfo.percentChange) >= 0 ? "show-chart" : "trending-down"} 
+                                size={24} 
+                                color={parseFloat(selectedNavInfo.percentChange) >= 0 ? "#10B981" : "#DC2626"} 
+                            />
+                            <Text style={[
+                                styles.changePercentage,
+                                parseFloat(selectedNavInfo.percentChange) < 0 && styles.negativeChangePercentage
+                            ]}>
+                                {selectedNavInfo.percentChange ? `${parseFloat(selectedNavInfo.percentChange) > 0 ? '+' : ''}${selectedNavInfo.percentChange}%` : fundData.changePercentage}%
+                            </Text>
                         </View>
                     </View>
                 </View>
 
-                {/* Collapsible Sections */}
+                {/* Collapsible Sections - Static Data */}
                 {renderCollapsibleSection(
                     'Return calculator',
                     <MaterialCommunityIcons name="calculator" size={20} color="#1A365D" />,
@@ -764,7 +1021,7 @@ const FundDetail = () => {
                         </TouchableOpacity>
                     </View>
                 </View>
-            </ScrollView>
+            </Animated.ScrollView>
 
             {/* Fixed Bottom Actions */}
             <View style={styles.bottomActions}>
@@ -783,6 +1040,7 @@ const FundDetail = () => {
 };
 
 const styles = StyleSheet.create({
+    // ... (keep all your existing styles)
     container: {
         flex: 1,
         backgroundColor: '#F9FAFB',
@@ -828,13 +1086,30 @@ const styles = StyleSheet.create({
         marginBottom: 16,
     },
     fundIcon: {
-        width: 48,
-        height: 48,
+        width: 58,
+        height: 58,
         borderRadius: 12,
         backgroundColor: '#FEF3C7',
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: 12,
+        overflow: 'hidden',
+    },
+    fundImage: {
+        width: 58,
+        height: 58,
+        borderRadius: 12,
+    },
+    fallbackIcon: {
+        width: '100%',
+        height: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    fundInitials: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#fff',
     },
     fundNameContainer: {
         flex: 1,
@@ -849,6 +1124,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         flexWrap: 'wrap',
+        marginBottom: 8,
     },
     riskBadge: {
         flexDirection: 'row',
@@ -859,15 +1135,49 @@ const styles = StyleSheet.create({
         borderRadius: 6,
         marginRight: 8,
     },
+    riskBadgeHigh: {
+        backgroundColor: '#FEE2E2',
+    },
     riskText: {
         fontSize: 12,
         fontWeight: '500',
         color: '#DC2626',
         marginLeft: 4,
     },
+    riskTextHigh: {
+        color: '#DC2626',
+    },
     categoryText: {
         fontSize: 14,
         color: '#6B7280',
+    },
+    planDetails: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    planBadge: {
+        backgroundColor: '#F1F5F9',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 4,
+    },
+    planBadgeText: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: '#475569',
+    },
+    amfiBadge: {
+        backgroundColor: '#E0F2FE',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 4,
+    },
+    amfiBadgeText: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: '#0369A1',
     },
     navContainer: {
         marginBottom: 16,
@@ -892,19 +1202,6 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#6B7280',
     },
-    ratingContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    starContainer: {
-        flexDirection: 'row',
-        marginRight: 6,
-    },
-    ratingText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#F59E0B',
-    },
     returnRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -924,6 +1221,9 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: '#059669',
     },
+    negativeReturn: {
+        color: '#DC2626',
+    },
     dayChange: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -932,11 +1232,17 @@ const styles = StyleSheet.create({
         paddingVertical: 6,
         borderRadius: 16,
     },
+    negativeChange: {
+        backgroundColor: '#FEE2E2',
+    },
     dayChangeText: {
         fontSize: 14,
         fontWeight: '600',
         color: '#065F46',
         marginLeft: 4,
+    },
+    negativeChangeText: {
+        color: '#DC2626',
     },
     graphSection: {
         backgroundColor: '#fff',
@@ -951,7 +1257,7 @@ const styles = StyleSheet.create({
     },
     periodTab: {
         paddingVertical: 8,
-        paddingHorizontal: 12,
+        paddingHorizontal: 16,
         borderRadius: 8,
     },
     periodTabActive: {
@@ -1015,15 +1321,30 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: '#1F2937',
     },
+    priceDate: {
+        fontSize: 12,
+        color: '#6B7280',
+        marginTop: 2,
+    },
     changeContainer: {
         flexDirection: 'row',
         alignItems: 'center',
+        backgroundColor: '#D1FAE5',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 20,
+    },
+    negativeChangeContainer: {
+        backgroundColor: '#FEE2E2',
     },
     changePercentage: {
         fontSize: 20,
         fontWeight: '700',
         color: '#10B981',
         marginLeft: 8,
+    },
+    negativeChangePercentage: {
+        color: '#DC2626',
     },
     // Section Styles
     sectionContainer: {
@@ -1581,6 +1902,173 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         color: '#fff',
+    },
+    // Skeleton Styles
+    skeletonContainer: {
+        flex: 1,
+        backgroundColor: '#F9FAFB',
+    },
+    skeletonHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        backgroundColor: '#fff',
+        borderBottomWidth: 1,
+        borderBottomColor: '#E5E7EB',
+    },
+    skeletonBackButton: {
+        width: 40,
+        height: 40,
+        backgroundColor: '#E5E7EB',
+        borderRadius: 8,
+    },
+    skeletonHeaderTitle: {
+        width: 120,
+        height: 24,
+        backgroundColor: '#E5E7EB',
+        borderRadius: 6,
+    },
+    skeletonHeaderButton: {
+        width: 40,
+        height: 40,
+        backgroundColor: '#E5E7EB',
+        borderRadius: 8,
+    },
+    skeletonContent: {
+        flex: 1,
+    },
+    skeletonFundHeader: {
+        backgroundColor: '#fff',
+        padding: 20,
+        marginBottom: 12,
+    },
+    skeletonTitleRow: {
+        flexDirection: 'row',
+        marginBottom: 16,
+    },
+    skeletonIcon: {
+        width: 48,
+        height: 48,
+        backgroundColor: '#E5E7EB',
+        borderRadius: 12,
+        marginRight: 12,
+    },
+    skeletonFundInfo: {
+        flex: 1,
+    },
+    skeletonFundName: {
+        width: '80%',
+        height: 24,
+        backgroundColor: '#E5E7EB',
+        borderRadius: 6,
+        marginBottom: 8,
+    },
+    skeletonFundMeta: {
+        width: '60%',
+        height: 20,
+        backgroundColor: '#E5E7EB',
+        borderRadius: 4,
+    },
+    skeletonNavRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    skeletonNavLabel: {
+        width: 40,
+        height: 16,
+        backgroundColor: '#E5E7EB',
+        borderRadius: 4,
+        marginRight: 8,
+    },
+    skeletonNavValue: {
+        width: 80,
+        height: 24,
+        backgroundColor: '#E5E7EB',
+        borderRadius: 6,
+    },
+    skeletonReturnRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    skeletonAnnualReturn: {
+        width: 100,
+        height: 40,
+        backgroundColor: '#E5E7EB',
+        borderRadius: 8,
+    },
+    skeletonDayChange: {
+        width: 80,
+        height: 32,
+        backgroundColor: '#E5E7EB',
+        borderRadius: 16,
+    },
+    skeletonGraph: {
+        backgroundColor: '#fff',
+        padding: 20,
+        marginBottom: 12,
+    },
+    skeletonPeriodTabs: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 20,
+    },
+    skeletonPeriodTab: {
+        width: 45,
+        height: 32,
+        backgroundColor: '#E5E7EB',
+        borderRadius: 8,
+    },
+    skeletonGraphArea: {
+        width: '100%',
+        height: 200,
+        backgroundColor: '#F1F5F9',
+        borderRadius: 12,
+    },
+    skeletonPriceCard: {
+        backgroundColor: '#fff',
+        margin: 20,
+        marginTop: 0,
+        marginBottom: 12,
+        padding: 20,
+        height: 80,
+        borderRadius: 16,
+    },
+    skeletonSection: {
+        backgroundColor: '#fff',
+        marginHorizontal: 20,
+        marginBottom: 12,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+    },
+    skeletonSectionHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        paddingVertical: 18,
+    },
+    skeletonSectionIcon: {
+        width: 36,
+        height: 36,
+        backgroundColor: '#E5E7EB',
+        borderRadius: 10,
+        marginRight: 12,
+    },
+    skeletonSectionTitle: {
+        flex: 1,
+        height: 20,
+        backgroundColor: '#E5E7EB',
+        borderRadius: 4,
+    },
+    skeletonSectionArrow: {
+        width: 24,
+        height: 24,
+        backgroundColor: '#E5E7EB',
+        borderRadius: 4,
     },
 });
 

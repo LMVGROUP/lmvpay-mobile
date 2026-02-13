@@ -165,7 +165,7 @@ const index = () => {
   ];
 
   const sumInsuredOptions = ['₹5L', '₹7L','₹10L', '₹15L', '₹25L', '₹50L', '₹100L'];
-  const tenureOptions = ['1 Year', '2 Years', '3 Years'];
+  const tenureOptions = ['1 Year', '2 Year', '3 Year'];
 
   const processSumInsured = (value) => {
     return value.replace('₹', '').replace('L', '');
@@ -254,7 +254,7 @@ const viewQuote = async () => {
       number: mobile,
       pincode: pincode,
       policyType: getPolicyType(members),
-      providers: ["care"],
+      providers: ["reliance"],
       selectedCoverage: processSumInsured(sumInsured),
       state: "Telangana", // You might want to make this dynamic
       tenure: policyTenure
@@ -267,7 +267,7 @@ const viewQuote = async () => {
         payload
       );
 
-      console.log('Response:', response.data.body.data);
+      console.log('Response:', response);
 
       if (response.data && response.data.body.data) {
         router.push({

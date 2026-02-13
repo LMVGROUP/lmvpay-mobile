@@ -12,6 +12,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   TouchableWithoutFeedback,
+  Linking,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import {
@@ -482,7 +483,31 @@ const HeaderWithPlanDetails = () => {
       year: 'numeric'
     });
   };
+const formatDOB = (dateInput) => {
+  if (!dateInput) return "";
 
+  const d = new Date(dateInput);
+
+  if (isNaN(d.getTime())) return "";
+
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+
+  return `${day}/${month}/${year}`;
+};
+
+const getCkycNumber = async(payload) =>{
+    try{
+        const response = await axios.post(`${API_BASE_URL}/lmvpay/insurance/ckyc`,payload);
+        console.log(response.data.data,"ckyc response");
+        return response.data.data;
+
+    }catch(error){
+        console.error('error in getCkycNumber request',error);
+        return error;
+    }
+}
   // Navigate to next tab
   const handleContinue = async () => {
     if (!validateCurrentTab()) {
@@ -515,19 +540,19 @@ const HeaderWithPlanDetails = () => {
       membersData: {
         self: {
             title: "MR",
-            firstName: "satya",
-            lastName: "boda",
+            firstName: "Asarelly",
+            lastName: "Venu",
             dob: "01/01/2000",
-            maritalStatus: "unmarried",
+            maritalStatus: "married",
             gender: "male",
             height: "170",
-            weight: "79",
+            weight: "80",
             relationship: "self"
         }
     },
       nomineeData: {
         nomineeName: nominee.fullName,
-        nomineeDob: nominee.dob,
+        nomineeDob:formatDOB(nominee.dob) ,
         relation: nominee.relationship,
         title: "",
         nomineeAdress1: "",
@@ -551,7 +576,7 @@ const HeaderWithPlanDetails = () => {
         pincode: proposer.pincode,
         policyType: "Individual",
         provider: paramData.company_name,
-        selectedCoverage: paramData.apiData.sumInsured,
+        selectedCoverage: paramData.userPayload.selectedCoverage,
         state: "Telangana",
         // field_AHC: getAddonFieldValue('Annual Health Check-up'),
         // field_OPD: getAddonFieldValue('Care OPD'),
@@ -564,7 +589,7 @@ const HeaderWithPlanDetails = () => {
         // field_UEC: getAddonFieldValue('Unlimited E Consultation'),
         // field_PPH: getAddonFieldValue('Pre Post Hospitalization'),
         // field_SS: getAddonFieldValue('Smart Select'),
-        tenure:paramData.apiData.term.replace(" year", "").replace(" years", "").trim()|| "1",
+        tenure: paramData.userPayload.tenure,
         abacusId: paramData.name === "Care Advantage" ? 6120 : paramData.name === "Care Supreme" ? 5367 : null,
         productId: paramData.name === "Reliance Gain" ? 2868 : paramData.name === "Reliance Infinity" ? 2824 : null,
       },
@@ -572,7 +597,7 @@ const HeaderWithPlanDetails = () => {
         selftitle: proposer.title,
         firstname: proposer.firstName,
         lastname: proposer.lastName,
-        birthDate: proposer.dob,
+        birthDate: formatDOB(proposer.dob),
         gender: proposer.gender,
         mobile: proposer.mobile,
         email: proposer.email,
@@ -614,7 +639,16 @@ const HeaderWithPlanDetails = () => {
         `${API_BASE_URL}/lmvpay/insurance/proposal`,
         payload
       );
-      console.log(response,"response of proposal.......")
+      console.log(response.data.data.body.Policy.ProposalNo,"response of proposal.......")
+       const proposalNum = response?.data?.data?.body?.Policy?.ProposalNo;
+        const ckycResponse = await getCkycNumber(payload);
+     const redirectUrl = ckycResponse?.body?.Endpoint_2_URL;
+
+if (redirectUrl) {
+  await Linking.openURL(redirectUrl);
+} else {
+  Alert.alert("Error", "Redirect URL not found");
+}
       Alert.alert('Success', 'All sections completed successfully!');
     }
   };
