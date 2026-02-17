@@ -18,6 +18,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import LottieView from 'lottie-react-native';
 import axios from 'axios';
+import { useDispatch } from 'react-redux';
+import { setUserPayload } from '../../../../store/healthSlice';
 
 const { width, height } = Dimensions.get('window');
 
@@ -143,6 +145,7 @@ const getRelationDisplayName = (members, relation, memberId) => {
 
 const index = () => {
   const router = useRouter();
+  const dispatch = useDispatch();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [mobile, setMobile] = useState('');
@@ -261,7 +264,7 @@ const viewQuote = async () => {
     };
 
       console.log('Sending payload:', payload);
-
+       dispatch(setUserPayload(payload));
       const response = await axios.post(
         `${API_BASE_URL}/lmvpay/insurance/quote`,
         payload

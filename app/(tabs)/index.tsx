@@ -24,7 +24,7 @@ const handleFundPress = () => {
   const handleInsurancePress = (label: string) => {
     const routes: { [key: string]: string } = {
       Life: '/products/insurance/life',
-      Bike: '/products/insurance/bike',
+      Bike: '/products/insurance/motor',
       Health: '/products/insurance/health',
       pa: '/products/insurance/pa',
     };
@@ -138,7 +138,7 @@ const handleFundPress = () => {
               />
               <InsuranceItem
                 icon="bicycle"
-                label="Bike"
+                label="Motor"
                 onPress={() => handleInsurancePress('Bike')}
               />
               <InsuranceItem

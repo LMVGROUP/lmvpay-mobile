@@ -22,25 +22,32 @@ import {
 import Dropdown from '../../../../components/DropDown';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import axios from 'axios';
+import { useSelector } from 'react-redux';
 
 const { width } = Dimensions.get('window');
 const API_BASE_URL = 'http://192.168.0.208:8000';
 const ProposalForm = () => {
-   const router = useRouter();
+  const router = useRouter();
   const params = useLocalSearchParams();
   const paramsData = params.planData;
   const paramData = JSON.parse(paramsData);
   const [activeTab, setActiveTab] = useState('proposer');
   const [isContinueEnabled, setIsContinueEnabled] = useState(false);
   const scrollViewRef = useRef(null);
+  const userPayload = useSelector((state) => state.health.user);
+  const selectedPlanData = useSelector((state)=> state.health.selectedPlanData);
 
   // Title options for dropdown
   const titleOptions = ['MR', 'MS', 'MRS', 'DR', 'PROF'];
   const genderOptions = ['Male', 'Female', 'Others'];
   const maritalStatusOptions = ['Married', 'Unmarried', 'Divorced', 'Widowed'];
   const relationshipOptions = ['Self', 'Son', 'Daughter', 'Father', 'Mother', 'Spouse', 'Brother', 'Sister'];
-
+console.log(selectedPlanData.addOnsState,"selected")
   // Proposer Details State
+
+const getAddonFieldValue = (addOnName) => {
+  return selectedPlanData?.addOnsState?.selectedIds?.includes(addOnName) ?? false;
+};
   const [proposer, setProposer] = useState({
     title: '',
     firstName: '',
@@ -55,7 +62,7 @@ const ProposalForm = () => {
     mobile: '',
     pan: '',
   });
-  
+
   // Validation errors for proposer
   const [proposerErrors, setProposerErrors] = useState({});
 
@@ -65,108 +72,164 @@ const ProposalForm = () => {
     dob: new Date(),
     relationship: '',
   });
-  console.log(paramData?.name,"checking")
-useEffect(() => {
-  try {
-    if (paramsData) {
-      const parsedPlanData = JSON.parse(paramsData);
-      console.log('Parsed plan data:', parsedPlanData?.apiData);
-      
-      // You can use this data to display in your header or anywhere in the form
-      // For example:
-      // setPlanDetails(parsedPlanData);
+
+  useEffect(() => {
+    try {
+      if (paramsData) {
+        const parsedPlanData = JSON.parse(paramsData);
+      }
+    } catch (error) {
+      console.error('Error parsing plan data:', error);
     }
-  } catch (error) {
-    console.error('Error parsing plan data:', error);
-  }
-}, [paramsData]);
-  
+  }, [paramsData]);
+
+  useEffect(() => {
+    // Check if payload exists
+    if (userPayload) {
+      setProposer({
+        title: 'MR', // Default title, you might want to make this dynamic
+        firstName: userPayload.firstname || '',
+        lastName: userPayload.lastname || '',
+        dob: userPayload.dob ? new Date(userPayload.dob) : new Date(),
+        maritalStatus: '', // Not in payload, keep empty
+        gender: '', // Not in payload, keep empty
+        pincode: userPayload.pincode || '',
+        address1: '', // Not in payload
+        address2: '', // Not in payload
+        email: '', // Not in payload
+        mobile: userPayload.number || '',
+        pan: '', // Not in payload
+      });
+    } else {
+      console.log('❌ No payload found in Redux store');
+    }
+  }, [userPayload]);
+
   // Validation errors for nominee
   const [nomineeErrors, setNomineeErrors] = useState({});
-const HeaderWithPlanDetails = () => {
-  let planDetails = null;
-  
-  try {
-    if (paramsData) {
-      planDetails = JSON.parse(paramsData);
+  const HeaderWithPlanDetails = () => {
+    let planDetails = null;
+
+    try {
+      if (paramsData) {
+        planDetails = JSON.parse(paramsData);
+      }
+    } catch (error) {
+      console.error('Error parsing plan data in header:', error);
     }
-  } catch (error) {
-    console.error('Error parsing plan data in header:', error);
-  }
-  
-  if (!planDetails) {
+
+    if (!planDetails) {
+      return (
+        <View style={styles.header}>
+          <View style={styles.headerContent}>
+            <Text style={styles.headerTitle}>Insurance Proposal</Text>
+            <Text style={styles.headerSubtitle}>
+              Step {tabs.findIndex(t => t.id === activeTab) + 1} of {tabs.length}
+            </Text>
+          </View>
+        </View>
+      );
+    }
+
+    // Calculate premium in rupees (since it's stored in paise)
+    const finalPremiumRupees = planDetails.finalPremium / 100;
+    const coverageInLakhs = planDetails.coverage_amount / 100000;
+
     return (
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Insurance Proposal</Text>
+      <View style={styles.headerWithPlan}>
+        {/* Plan Details Section */}
+        <View style={styles.planDetailsContainer}>
+          <View style={styles.planRow}>
+            <View style={styles.planLogoContainer}>
+              {/* You can add logo here if available */}
+              <Text style={styles.planProvider}>{planDetails.company_name}</Text>
+            </View>
+            <View style={styles.planInfo}>
+              <Text style={styles.planName}>{planDetails.name}</Text>
+            </View>
+          </View>
+
+          <View style={styles.planDetailsRow}>
+            <View style={styles.planDetailItem}>
+              <Text style={styles.planDetailLabel}>Sum Insured</Text>
+              <Text style={styles.planDetailValue}>₹{coverageInLakhs} Lakhs</Text>
+            </View>
+            <View style={styles.planDetailItem}>
+              <Text style={styles.planDetailLabel}>Term</Text>
+              <Text style={styles.planDetailValue}>{planDetails.term} Year</Text>
+            </View>
+            <View style={styles.planDetailItem}>
+              <Text style={styles.planDetailLabel}>Premium</Text>
+              <Text style={styles.planPremiumValue}>
+                ₹{finalPremiumRupees.toLocaleString('en-IN')}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Step Indicator */}
+        <View style={styles.stepIndicator}>
+          <Text style={styles.headerTitle}>Proposal Form</Text>
           <Text style={styles.headerSubtitle}>
             Step {tabs.findIndex(t => t.id === activeTab) + 1} of {tabs.length}
           </Text>
         </View>
       </View>
     );
-  }
-
-  // Calculate premium in rupees (since it's stored in paise)
-  const finalPremiumRupees = planDetails.finalPremium / 100;
-  const coverageInLakhs = planDetails.coverage_amount / 100000;
-
-  return (
-    <View style={styles.headerWithPlan}>
-      {/* Plan Details Section */}
-      <View style={styles.planDetailsContainer}>
-        <View style={styles.planRow}>
-          <View style={styles.planLogoContainer}>
-            {/* You can add logo here if available */}
-            <Text style={styles.planProvider}>{planDetails.company_name}</Text>
-          </View>
-          <View style={styles.planInfo}>
-            <Text style={styles.planName}>{planDetails.name}</Text>
-          </View>
-        </View>
-        
-        <View style={styles.planDetailsRow}>
-          <View style={styles.planDetailItem}>
-            <Text style={styles.planDetailLabel}>Sum Insured</Text>
-            <Text style={styles.planDetailValue}>₹{coverageInLakhs} Lakhs</Text>
-          </View>
-          <View style={styles.planDetailItem}>
-            <Text style={styles.planDetailLabel}>Term</Text>
-            <Text style={styles.planDetailValue}>{planDetails.term} Year</Text>
-          </View>
-          <View style={styles.planDetailItem}>
-            <Text style={styles.planDetailLabel}>Premium</Text>
-            <Text style={styles.planPremiumValue}>
-              ₹{finalPremiumRupees.toLocaleString('en-IN')}
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Step Indicator */}
-      <View style={styles.stepIndicator}>
-        <Text style={styles.headerTitle}>Proposal Form</Text>
-        <Text style={styles.headerSubtitle}>
-          Step {tabs.findIndex(t => t.id === activeTab) + 1} of {tabs.length}
-        </Text>
-      </View>
-    </View>
-  );
-};
+  };
   // Member Details State
-  const [members, setMembers] = useState([
-    {
-      title: '',
-      firstName: '',
-      lastName: '',
-      dob: new Date(),
-      maritalStatus: '',
-      relationship: 'Self',
-      height: '',
-      weight: '',
+  const [members, setMembers] = useState([]);
+
+  // Initialize members based on noOfPeople from payload
+  useEffect(() => {
+    if (userPayload?.familyMembers && userPayload.familyMembers.length > 0) {
+      // Use familyMembers from payload to pre-fill member details
+      const initialMembers = userPayload.familyMembers.map(member => ({
+        title: 'MR', // Default, you might want to make this dynamic
+        firstName: '', // Family members might not have names in payload
+        lastName: '',
+        dob: new Date(), // Default to current date
+        maritalStatus: '',
+        relationship: member.relation || 'Self',
+        height: '',
+        weight: '',
+        age: member.age || '', // Store age for reference
+      }));
+
+      setMembers(initialMembers);
+    } else if (userPayload?.noOfPeople) {
+      // If no familyMembers array but we have noOfPeople, create empty members
+      const count = parseInt(userPayload.noOfPeople) || 1;
+      const initialMembers = [];
+
+      for (let i = 0; i < count; i++) {
+        initialMembers.push({
+          title: '',
+          firstName: '',
+          lastName: '',
+          dob: new Date(),
+          maritalStatus: '',
+          relationship: i === 0 ? 'Self' : '', // First member is Self
+          height: '',
+          weight: '',
+        });
+      }
+
+      setMembers(initialMembers);
+    } else {
+      // Default to at least one member
+      setMembers([{
+        title: '',
+        firstName: '',
+        lastName: '',
+        dob: new Date(),
+        maritalStatus: '',
+        relationship: 'Self',
+        height: '',
+        weight: '',
+      }]);
     }
-  ]);
-  
+  }, [userPayload]);
   // Validation errors for members
   const [memberErrors, setMemberErrors] = useState([{}]);
 
@@ -178,7 +241,7 @@ const HeaderWithPlanDetails = () => {
     ifscCode: '',
     branchName: '',
   });
-  
+
   // Validation errors for bank
   const [bankErrors, setBankErrors] = useState({});
 
@@ -192,33 +255,33 @@ const HeaderWithPlanDetails = () => {
 
   // Tabs configuration
   const tabs = [
-    { 
-      id: 'proposer', 
-      label: 'Proposer', 
+    {
+      id: 'proposer',
+      label: 'Proposer',
       icon: 'person-outline',
       activeIcon: 'person',
     },
-    { 
-      id: 'nominee', 
-      label: 'Nominee', 
+    {
+      id: 'nominee',
+      label: 'Nominee',
       icon: 'person-add-outline',
       activeIcon: 'person-add',
     },
-    { 
-      id: 'member', 
-      label: 'Members', 
+    {
+      id: 'member',
+      label: 'Members',
       icon: 'people-outline',
       activeIcon: 'people',
     },
-    { 
-      id: 'medical', 
-      label: 'Medical', 
+    {
+      id: 'medical',
+      label: 'Medical',
       icon: 'medical-outline',
       activeIcon: 'medical',
     },
-    { 
-      id: 'bank', 
-      label: 'Bank', 
+    {
+      id: 'bank',
+      label: 'Bank',
       icon: 'card-outline',
       activeIcon: 'card',
     },
@@ -258,25 +321,25 @@ const HeaderWithPlanDetails = () => {
   // Proposer validation
   const validateProposer = () => {
     const errors = {};
-    
+
     if (!proposer.title.trim()) errors.title = 'Title is required';
     if (!proposer.firstName.trim()) errors.firstName = 'First name is required';
     if (!proposer.lastName.trim()) errors.lastName = 'Last name is required';
-    
+
     const age = new Date().getFullYear() - proposer.dob.getFullYear();
     if (age < 18) errors.dob = 'Must be 18 years or older';
     if (age > 100) errors.dob = 'Invalid date of birth';
-    
+
     if (!proposer.maritalStatus) errors.maritalStatus = 'Marital status is required';
     if (!proposer.gender) errors.gender = 'Gender is required';
-    
+
     if (!validatePincode(proposer.pincode)) errors.pincode = 'Invalid pincode';
     if (!proposer.address1.trim()) errors.address1 = 'Address is required';
-    
+
     if (!validateEmail(proposer.email)) errors.email = 'Invalid email address';
     if (!validateMobile(proposer.mobile)) errors.mobile = 'Invalid mobile number';
     if (!validatePAN(proposer.pan)) errors.pan = 'Invalid PAN number';
-    
+
     setProposerErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -284,14 +347,14 @@ const HeaderWithPlanDetails = () => {
   // Nominee validation
   const validateNominee = () => {
     const errors = {};
-    
+
     if (!nominee.fullName.trim()) errors.fullName = 'Nominee name is required';
-    
+
     const age = new Date().getFullYear() - nominee.dob.getFullYear();
     if (age > 100) errors.dob = 'Invalid date of birth';
-    
+
     if (!nominee.relationship) errors.relationship = 'Relationship is required';
-    
+
     setNomineeErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -300,10 +363,10 @@ const HeaderWithPlanDetails = () => {
   const validateMembers = () => {
     const errors = [];
     let isValid = true;
-    
+
     members.forEach((member, index) => {
       const memberErrors = {};
-      
+
       if (!member.title.trim()) {
         memberErrors.title = 'Title is required';
         isValid = false;
@@ -316,18 +379,18 @@ const HeaderWithPlanDetails = () => {
         memberErrors.lastName = 'Last name is required';
         isValid = false;
       }
-      
+
       const age = new Date().getFullYear() - member.dob.getFullYear();
       if (age > 100) {
         memberErrors.dob = 'Invalid date of birth';
         isValid = false;
       }
-      
+
       if (!member.relationship) {
         memberErrors.relationship = 'Relationship is required';
         isValid = false;
       }
-      
+
       if (!member.height) {
         memberErrors.height = 'Height is required';
         isValid = false;
@@ -335,7 +398,7 @@ const HeaderWithPlanDetails = () => {
         memberErrors.height = 'Invalid height (50-250 cm)';
         isValid = false;
       }
-      
+
       if (!member.weight) {
         memberErrors.weight = 'Weight is required';
         isValid = false;
@@ -343,10 +406,10 @@ const HeaderWithPlanDetails = () => {
         memberErrors.weight = 'Invalid weight (10-200 kg)';
         isValid = false;
       }
-      
+
       errors[index] = memberErrors;
     });
-    
+
     setMemberErrors(errors);
     return isValid;
   };
@@ -354,13 +417,13 @@ const HeaderWithPlanDetails = () => {
   // Bank validation
   const validateBank = () => {
     const errors = {};
-    
+
     if (!bankDetails.nameAsPerBankAccount.trim()) errors.nameAsPerBankAccount = 'Account holder name is required';
     if (!bankDetails.bankName.trim()) errors.bankName = 'Bank name is required';
-    
+
     if (!validateAccountNumber(bankDetails.accountNumber)) errors.accountNumber = 'Invalid account number';
     if (!validateIFSC(bankDetails.ifscCode)) errors.ifscCode = 'Invalid IFSC code';
-    
+
     setBankErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -387,7 +450,7 @@ const HeaderWithPlanDetails = () => {
   useEffect(() => {
     const isValid = validateCurrentTab();
     setIsContinueEnabled(isValid);
-    
+
     // Mark tab as completed if valid
     if (isValid && !completedTabs.includes(activeTab)) {
       setCompletedTabs([...completedTabs, activeTab]);
@@ -415,7 +478,7 @@ const HeaderWithPlanDetails = () => {
     const updatedMembers = [...members];
     updatedMembers[index] = { ...updatedMembers[index], [field]: value };
     setMembers(updatedMembers);
-    
+
     if (memberErrors[index]?.[field]) {
       const updatedErrors = [...memberErrors];
       updatedErrors[index] = { ...updatedErrors[index], [field]: '' };
@@ -483,38 +546,38 @@ const HeaderWithPlanDetails = () => {
       year: 'numeric'
     });
   };
-const formatDOB = (dateInput) => {
-  if (!dateInput) return "";
+  const formatDOB = (dateInput) => {
+    if (!dateInput) return "";
 
-  const d = new Date(dateInput);
+    const d = new Date(dateInput);
 
-  if (isNaN(d.getTime())) return "";
+    if (isNaN(d.getTime())) return "";
 
-  const day = String(d.getDate()).padStart(2, "0");
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const year = d.getFullYear();
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
 
-  return `${day}/${month}/${year}`;
-};
+    return `${day}/${month}/${year}`;
+  };
 
-const getCkycNumber = async(payload) =>{
-    try{
-        const response = await axios.post(`${API_BASE_URL}/lmvpay/insurance/ckyc`,payload);
-        console.log(response.data.data,"ckyc response");
-        return response.data.data;
+  const getCkycNumber = async (payload) => {
+    try {
+      const response = await axios.post(`${API_BASE_URL}/lmvpay/insurance/ckyc`, payload);
+      console.log(response.data.data, "ckyc response");
+      return response.data.data;
 
-    }catch(error){
-        console.error('error in getCkycNumber request',error);
-        return error;
+    } catch (error) {
+      console.error('error in getCkycNumber request', error);
+      return error;
     }
-}
+  }
   // Navigate to next tab
   const handleContinue = async () => {
     if (!validateCurrentTab()) {
       Alert.alert('Validation Error', 'Please fill all required fields correctly');
       return;
     }
-    
+
     const currentIndex = tabs.findIndex(tab => tab.id === activeTab);
     if (currentIndex < tabs.length - 1) {
       const nextTab = tabs[currentIndex + 1];
@@ -524,21 +587,21 @@ const getCkycNumber = async(payload) =>{
       }
     } else {
       const payload = {
-      additionalInfo: {
-        abhaNumber: "",
-        hardcopyRequested: "N",
-        accountholder: bankDetails.nameAsPerBankAccount,
-        bankname: bankDetails.bankName,
-        AccountNumber: bankDetails.accountNumber,
-        ifsccode: bankDetails.ifscCode,
-        agentId: 1000,
-        any_previous_medical_condition: "No"
-      },
-      channel: "CUSTOMER",
-      ckycNum: "",
-      empId: null,
-      membersData: {
-        self: {
+        additionalInfo: {
+          abhaNumber: "",
+          hardcopyRequested: "N",
+          accountholder: bankDetails.nameAsPerBankAccount,
+          bankname: bankDetails.bankName,
+          AccountNumber: bankDetails.accountNumber,
+          ifsccode: bankDetails.ifscCode,
+          agentId: 1000,
+          any_previous_medical_condition: "No"
+        },
+        channel: "CUSTOMER",
+        ckycNum: "",
+        empId: null,
+        membersData: {
+          self: {
             title: "MR",
             firstName: "Asarelly",
             lastName: "Venu",
@@ -548,107 +611,112 @@ const getCkycNumber = async(payload) =>{
             height: "170",
             weight: "80",
             relationship: "self"
+          }
+        },
+        nomineeData: {
+          nomineeName: nominee.fullName,
+          nomineeDob: formatDOB(nominee.dob),
+          relation: nominee.relationship,
+          title: "",
+          nomineeAdress1: "",
+          nomineeAdress2: "",
+          appointeeName: "",
+          appointeeDob: ""
+        },
+        premiumPostBody: {
+          ChildrenAges: [],
+          adultsAges: paramData?.userPayload?.adultAges || [],
+          familyAges: paramData?.userPayload?.familyAges || [],
+          firstname: proposer.firstName,
+          lastname: proposer.lastName,
+          highestElderAge: paramData.userPayload.highestElderAge || "30",
+          any_previous_medical_condition: "No",
+          city: "Adilabad",
+          noOfChildren: paramData.userPayload.noOfChildren || "0",
+          noOfParents: paramData.userPayload.noOfParents || "0",
+          noOfPeople: paramData.userPayload.noOfPeople || "1",
+          number: proposer.mobile,
+          pincode: proposer.pincode,
+          policyType: "Individual",
+          provider: paramData.company_name,
+          selectedCoverage: paramData.userPayload.selectedCoverage,
+          state: "Telangana",
+          relinaceInfinityDoubleCover : getAddonFieldValue("DoubleCover"),
+          relinaceInfinityHomeTreatment : getAddonFieldValue("HomeTreatment"),
+          relinaceInfinityLimitlessCover : getAddonFieldValue("LimitlessCover"),
+          relinaceInfinityMedicalEquipmentCover : getAddonFieldValue("MedicalEquipmentCover"),
+          relinaceInfinitySpecificIllnessWaitingPeriod : getAddonFieldValue("SpecificIllnessWaitingPeriod"),
+          relinaceInfinityPreExistingWaitingPeriod : getAddonFieldValue("PreExistingWaitingPeriod"),
+          // field_AHC: getAddonFieldValue('Annual Health Check-up'),
+          // field_OPD: getAddonFieldValue('Care OPD'),
+          // field_WB: getAddonFieldValue('Wellness Benefit'),
+          // field_IC: getAddonFieldValue('Instant Cover'),
+          // field_CS: getAddonFieldValue('Claim Shield'),
+          // field_NCB: getAddonFieldValue('Bonus Benefits') || getAddonFieldValue('NCB Super'),
+          // field_BFB: getAddonFieldValue('Be-Fit Benefit'),
+          // field_CSP: getAddonFieldValue('Claim Shield Plus'),
+          // field_UEC: getAddonFieldValue('Unlimited E Consultation'),
+          // field_PPH: getAddonFieldValue('Pre Post Hospitalization'),
+          // field_SS: getAddonFieldValue('Smart Select'),
+          tenure: paramData.userPayload.tenure,
+          abacusId: paramData.name === "Care Advantage" ? 6120 : paramData.name === "Care Supreme" ? 5367 : null,
+          productId: paramData.name === "Reliance Gain" ? 2868 : paramData.name === "Reliance Infinity" ? 2824 : null,
+        },
+        proposerData: {
+          selftitle: proposer.title,
+          firstname: proposer.firstName,
+          lastname: proposer.lastName,
+          birthDate: formatDOB(proposer.dob),
+          gender: proposer.gender,
+          mobile: proposer.mobile,
+          email: proposer.email,
+          addressLine1: proposer.address1,
+          addressLine2: proposer.address2,
+          pincode: proposer.pincode,
+          marital_status: proposer.maritalStatus,
+          pan: proposer.pan,
+          adharCardNumber: "",
+          generatedCkycNumber: "",
+          IndustryDetails: "",
+          IndustryType: "",
+          IsCrimeRecord: "",
+          IsInvestableAssets: "",
+          IsTotalAggregate: "",
+          Occupation: "",
+          ResidenceStatus: "",
+          addons: "",
+          nationality: ""
+        },
+        questionnaireResults: {},
+        quotationData: {
+          provider: paramData.company_name,
+          code: paramData.name === "Care Advantage" ? 6120 : 5367 || null,
+          productName: paramData.name,
+          sumInsured: paramData.apiData.sumInsured,
+          term: paramData.apiData.term.replace(" year", "").replace(" years", "").trim(),
+          premium: String(paramData.apiData.premium).replace(/,/g, ""),
+          premiumWithGST: String(paramData.apiData.premiumWithGST).replace(/,/g, "")
+        },
+        loginDetails: {
+          userId: null,
+          userType: null,
+          isLoggedIn: false
         }
-    },
-      nomineeData: {
-        nomineeName: nominee.fullName,
-        nomineeDob:formatDOB(nominee.dob) ,
-        relation: nominee.relationship,
-        title: "",
-        nomineeAdress1: "",
-        nomineeAdress2: "",
-        appointeeName: "",
-        appointeeDob: ""
-      },
-      premiumPostBody: {
-        ChildrenAges:  [],
-        adultsAges: paramData?.userPayload?.adultAges || [],
-        familyAges: paramData?.userPayload?.familyAges || [],
-        firstname: proposer.firstName,
-        lastname: proposer.lastName,
-        highestElderAge: paramData.userPayload.highestElderAge || "30",
-        any_previous_medical_condition: "No",
-        city: "Adilabad",
-        noOfChildren: paramData.userPayload.noOfChildren || "0",
-        noOfParents:  paramData.userPayload.noOfParents || "0",
-        noOfPeople:  paramData.userPayload.noOfPeople || "1",
-        number: proposer.mobile,
-        pincode: proposer.pincode,
-        policyType: "Individual",
-        provider: paramData.company_name,
-        selectedCoverage: paramData.userPayload.selectedCoverage,
-        state: "Telangana",
-        // field_AHC: getAddonFieldValue('Annual Health Check-up'),
-        // field_OPD: getAddonFieldValue('Care OPD'),
-        // field_WB: getAddonFieldValue('Wellness Benefit'),
-        // field_IC: getAddonFieldValue('Instant Cover'),
-        // field_CS: getAddonFieldValue('Claim Shield'),
-        // field_NCB: getAddonFieldValue('Bonus Benefits') || getAddonFieldValue('NCB Super'),
-        // field_BFB: getAddonFieldValue('Be-Fit Benefit'),
-        // field_CSP: getAddonFieldValue('Claim Shield Plus'),
-        // field_UEC: getAddonFieldValue('Unlimited E Consultation'),
-        // field_PPH: getAddonFieldValue('Pre Post Hospitalization'),
-        // field_SS: getAddonFieldValue('Smart Select'),
-        tenure: paramData.userPayload.tenure,
-        abacusId: paramData.name === "Care Advantage" ? 6120 : paramData.name === "Care Supreme" ? 5367 : null,
-        productId: paramData.name === "Reliance Gain" ? 2868 : paramData.name === "Reliance Infinity" ? 2824 : null,
-      },
-      proposerData: {
-        selftitle: proposer.title,
-        firstname: proposer.firstName,
-        lastname: proposer.lastName,
-        birthDate: formatDOB(proposer.dob),
-        gender: proposer.gender,
-        mobile: proposer.mobile,
-        email: proposer.email,
-        addressLine1: proposer.address1,
-        addressLine2: proposer.address2,
-        pincode: proposer.pincode,
-        marital_status: proposer.maritalStatus,
-        pan: proposer.pan,
-        adharCardNumber: "",
-        generatedCkycNumber: "",
-        IndustryDetails: "",
-        IndustryType: "",
-        IsCrimeRecord: "",
-        IsInvestableAssets: "",
-        IsTotalAggregate: "",
-        Occupation: "",
-        ResidenceStatus: "",
-        addons: "",
-        nationality: ""
-      },
-      questionnaireResults: {},
-      quotationData: {
-        provider: paramData.company_name,
-        code: paramData.name === "Care Advantage" ? 6120 : 5367 || null,
-        productName: paramData.name,
-        sumInsured: paramData.apiData.sumInsured,
-        term: paramData.apiData.term.replace(" year", "").replace(" years", "").trim(),
-        premium: String(paramData.apiData.premium).replace(/,/g, ""),
-        premiumWithGST: String(paramData.apiData.premiumWithGST).replace(/,/g, "")
-      },
-      loginDetails : {
-        userId: null,
-        userType: null,
-        isLoggedIn: false
-      }
-    };
-      console.log(payload,"hello")
-       const response = await axios.post(
+      };
+      const response = await axios.post(
         `${API_BASE_URL}/lmvpay/insurance/proposal`,
         payload
       );
-      console.log(response.data.data.body.Policy.ProposalNo,"response of proposal.......")
-       const proposalNum = response?.data?.data?.body?.Policy?.ProposalNo;
-        const ckycResponse = await getCkycNumber(payload);
-     const redirectUrl = ckycResponse?.body?.Endpoint_2_URL;
+      console.log(response.data.data.body.Policy.ProposalNo, "response of proposal.......")
+      const proposalNum = response?.data?.data?.body?.Policy?.ProposalNo;
+      const ckycResponse = await getCkycNumber(payload);
+      const redirectUrl = ckycResponse?.body?.Endpoint_2_URL;
 
-if (redirectUrl) {
-  await Linking.openURL(redirectUrl);
-} else {
-  Alert.alert("Error", "Redirect URL not found");
-}
+      if (redirectUrl) {
+        await Linking.openURL(redirectUrl);
+      } else {
+        Alert.alert("Error", "Redirect URL not found");
+      }
       Alert.alert('Success', 'All sections completed successfully!');
     }
   };
@@ -665,18 +733,18 @@ if (redirectUrl) {
   // Improved Tabs Component - Compact and Clean
   const renderTabs = () => {
     const tabWidth = width / Math.min(tabs.length, 5);
-    
+
     return (
       <View style={styles.tabsContainer}>
-        <ScrollView 
-          horizontal 
+        <ScrollView
+          horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.tabsScrollContent}
         >
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
             const isCompleted = completedTabs.includes(tab.id);
-            
+
             return (
               <TouchableOpacity
                 key={tab.id}
@@ -780,15 +848,15 @@ if (redirectUrl) {
 
   // Render Proposer Details Tab
   const renderProposerDetails = () => (
-    <ScrollView 
+    <ScrollView
       ref={scrollViewRef}
-      style={styles.tabContent} 
+      style={styles.tabContent}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={styles.scrollContent}
     >
       <Text style={styles.sectionTitle}>Personal Information</Text>
-      
+
       {renderDropdownWithError(
         'Title',
         proposer.title,
@@ -919,9 +987,9 @@ if (redirectUrl) {
 
   // Render Nominee Details Tab
   const renderNomineeDetails = () => (
-    <ScrollView 
+    <ScrollView
       ref={scrollViewRef}
-      style={styles.tabContent} 
+      style={styles.tabContent}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={styles.scrollContent}
@@ -973,29 +1041,34 @@ if (redirectUrl) {
 
   // Render Member Details Tab
   const renderMemberDetails = () => (
-    <ScrollView 
+    <ScrollView
       ref={scrollViewRef}
-      style={styles.tabContent} 
+      style={styles.tabContent}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={styles.scrollContent}
     >
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Family Members to be Insured</Text>
-        <TouchableOpacity style={styles.addButton} onPress={addMember}>
-          <Ionicons name="add-circle" size={20} color="#1a3d5c" />
-          <Text style={styles.addButtonText}>Add</Text>
-        </TouchableOpacity>
+        <Text style={styles.sectionTitle}>
+          Family Members to be Insured ({members.length} {members.length === 1 ? 'Member' : 'Members'})
+        </Text>
       </View>
 
       {members.map((member, index) => {
         const errors = memberErrors[index] || {};
-        
+        const isSelf = member.relationship === 'Self';
         return (
           <View key={index} style={styles.memberCard}>
             <View style={styles.memberHeader}>
-              <Text style={styles.memberTitle}>Member {index + 1}</Text>
-              {members.length > 1 && (
+              <View style={styles.memberTitleContainer}>
+                <Text style={styles.memberTitle}>
+                  Member {index + 1} {isSelf ? '(Self)' : ''}
+                </Text>
+                {member.age && (
+                  <Text style={styles.memberAge}>Age: {member.age}</Text>
+                )}
+              </View>
+              {members.length > 1 && !isSelf && (
                 <TouchableOpacity onPress={() => removeMember(index)}>
                   <Ionicons name="trash-outline" size={18} color="#ff3b30" />
                 </TouchableOpacity>
@@ -1104,15 +1177,14 @@ if (redirectUrl) {
 
   // Render Bank Details Tab
   const renderBankDetails = () => (
-    <ScrollView 
+    <ScrollView
       ref={scrollViewRef}
-      style={styles.tabContent} 
+      style={styles.tabContent}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={styles.scrollContent}
     >
       <Text style={styles.sectionTitle}>Bank Account Details</Text>
-
       <View style={styles.infoBox}>
         <Ionicons name="information-circle" size={18} color="#1a3d5c" />
         <Text style={styles.infoText}>
@@ -1186,13 +1258,10 @@ if (redirectUrl) {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'} >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.container}>
-           <HeaderWithPlanDetails />
-          {/* Header */}
-         
+          <HeaderWithPlanDetails />
           {/* Compact Tabs */}
           {renderTabs()}
 
@@ -1204,7 +1273,7 @@ if (redirectUrl) {
           {/* Navigation Buttons */}
           <View style={styles.footer}>
             {tabs.findIndex(t => t.id === activeTab) > 0 ? (
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.secondaryButton}
                 onPress={handleBack}
               >
@@ -1217,8 +1286,8 @@ if (redirectUrl) {
                 <Text style={styles.secondaryButtonText}>Save</Text>
               </TouchableOpacity>
             )}
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={[
                 styles.primaryButton,
                 !isContinueEnabled && styles.primaryButtonDisabled
@@ -1229,10 +1298,10 @@ if (redirectUrl) {
               <Text style={styles.primaryButtonText}>
                 {activeTab === 'bank' ? 'Submit' : 'Next'}
               </Text>
-              <Ionicons 
-                name={activeTab === 'bank' ? "checkmark" : "arrow-forward"} 
-                size={18} 
-                color="#fff" 
+              <Ionicons
+                name={activeTab === 'bank' ? "checkmark" : "arrow-forward"}
+                size={18}
+                color="#fff"
               />
             </TouchableOpacity>
           </View>
@@ -1337,7 +1406,7 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: '#1a3d5c',
     paddingHorizontal: 16,
-    
+
     paddingBottom: 12,
   },
   headerContent: {
@@ -1431,18 +1500,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
-  },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  addButtonText: {
-    color: '#1a3d5c',
-    fontWeight: '600',
-    fontSize: 12,
-    marginLeft: 4,
   },
   row: {
     flexDirection: 'row',

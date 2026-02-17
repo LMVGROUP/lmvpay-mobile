@@ -15,6 +15,8 @@ import { Ionicons, MaterialIcons, MaterialCommunityIcons } from '@expo/vector-ic
 import { useLocalSearchParams, useRouter,useFocusEffect  } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import axios from 'axios';
+import { useDispatch, useSelector } from 'react-redux';
+import { setSelectedPlanData } from '../../../../store/healthSlice';
 
 
 // Static add-ons data by plan type with dropdown options
@@ -285,8 +287,8 @@ const addOnsByPlan = {
       description: 'Annual sum insured increase',
       type: 'dropdown',
       options: [
-        { id: 'smart-20', name: '20% sum insured every year' },
-        { id: 'smart-30', name: '30% sum insured every year' }
+        { id: 'Option 1', name: '20% sum insured every year' },
+        { id: 'Option 2', name: '30% sum insured every year' }
       ]
     }
   ],
@@ -352,6 +354,7 @@ const API_BASE_URL = 'http://192.168.0.208:8000';
 
 export default function HealthQuotations() {
   const router = useRouter();
+  const dispatch = useDispatch();
   const params = useLocalSearchParams();
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -370,6 +373,12 @@ export default function HealthQuotations() {
   const quotesParam = params.quotes;
   const formId = params.formId;
   const payloadParam = params.payload;
+  const userPayload = useSelector((state) => state.health.user);
+ useEffect(() => {
+    console.log('🔄 useEffect triggered');
+    console.log('📦 User payload in quotations:', userPayload);
+  
+  }, [userPayload]);
   useEffect(() => {
     try {
       if (params.payload) {
@@ -570,6 +579,9 @@ export default function HealthQuotations() {
                 addonPayload.VoluntaryAggregateDeductible = true;
                 addonPayload.DeductibleGain = selectedOption.id;
                addonPayload.SelectedDeductible = true;
+              }else if(selectedOption.id === "Option 1" || selectedOption.id ==="Option 2"){
+                addonPayload.SmartProtector = true;
+                addonPayload.SuperChargerOptionInfinity = selectedOption.id;
               }
               else {
                 addonPayload[`${addOn.id}`] = selectedOption.id;
@@ -978,6 +990,7 @@ const handleSelectPlan = async (plan) => {
       }
     };
 console.log(planData,"plan data")
+dispatch(setSelectedPlanData(planData));
     router.push({
       pathname: '/products/insurance/health/proposal',
       params: {

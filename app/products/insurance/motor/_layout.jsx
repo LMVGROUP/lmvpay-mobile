@@ -6,8 +6,11 @@ export default function HealthLayout() {
             headerShown: false,
         }}>
             <Stack.Screen name="index" />
-            <Stack.Screen name="quotations"/>
-            <Stack.Screen name="proposal" />
+            <Stack.Screen name="CarForm" />
+            <Stack.Screen name="BikeForm" />
+            <Stack.Screen name="CommercialForm" />
+            <Stack.Screen name="Quotations"/>
+            <Stack.Screen name="addOn"/>
         </Stack>
     );
 }

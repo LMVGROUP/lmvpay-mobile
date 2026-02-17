@@ -33,8 +33,8 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
           
-          <Text style={styles.profileName}>John Doe</Text>
-          <Text style={styles.profileEmail}>john.doe@example.com</Text>
+          <Text style={styles.profileName}>Venu Verey</Text>
+          <Text style={styles.profileEmail}>venu.verey@example.com</Text>
           
           <View style={styles.verificationBadge}>
             <Ionicons name="shield-checkmark" size={14} color="#10b981" />
