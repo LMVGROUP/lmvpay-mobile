@@ -2,7 +2,7 @@
   "expo": {
     "name": "LmvPay",
     "slug": "lmvpay",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/lmvpayicon.png",
     "scheme": "lmvpay",
@@ -17,7 +17,8 @@
         "foregroundImage": "./assets/images/lmvpayicon.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.lakshithatech.lmvpay"
     },
     "web": {
       "output": "static",
@@ -41,6 +42,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "74a23aef-bc29-46cd-8197-e6124da48e58"
+      }
     }
   }
 }
